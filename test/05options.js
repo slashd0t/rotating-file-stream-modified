@@ -123,6 +123,7 @@ describe("options", function() {
 	describe("path", function() {
 		before(function(done) {
 			var self = this;
+			// process.env.npm_config_tmp
 			exec(done, "rm -rf /tmp/test.log /tmp/1-test.log ; echo test > /tmp/test.log", function() {
 				self.rfs = rfs(done, { path: "/tmp", size: "10B" });
 				self.rfs.end("test\n");
