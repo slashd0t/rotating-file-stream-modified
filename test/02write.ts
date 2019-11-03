@@ -45,7 +45,7 @@ describe("write(s)", () => {
 			rfs.write("test\n");
 		});
 
-		it("events", () => deq(events, { close: 1, error: ["Cannot call write after a stream was destroyed"], open: ["test.log"] }));
+		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"], open: ["test.log"] }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
 	});
 
@@ -57,7 +57,7 @@ describe("write(s)", () => {
 			})
 		);
 
-		it("events", () => deq(events, { close: 1, error: ["Cannot call write after a stream was destroyed"], open: ["test.log"] }));
+		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"], open: ["test.log"] }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
 	});
 
@@ -69,7 +69,7 @@ describe("write(s)", () => {
 			})
 		);
 
-		it("events", () => deq(events, { close: 1, open: ["test.log"], write: 1 }));
+		it("events", () => deq(events, { close: 1, finish: 1, open: ["test.log"], write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 	});
 
@@ -80,7 +80,7 @@ describe("write(s)", () => {
 			})
 		);
 
-		it("events", () => deq(events, { close: 1, open: ["test.log"], write: 1 }));
+		it("events", () => deq(events, { close: 1, finish: 1, open: ["test.log"], write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 	});
 });

@@ -56,6 +56,7 @@ export class RotatingFileStream extends Writable {
 	private destroyer: () => void;
 	private error: Error;
 	private filename: string;
+	private finished: boolean;
 	private generator: Generator;
 	private opened: () => void;
 	private options: Options;
@@ -79,6 +80,9 @@ export class RotatingFileStream extends Writable {
 		this.options = options;
 		this.rename = rename;
 		this.stat = stat;
+
+		this.on("close", () => (this.finished ? null : this.emit("finish")));
+		this.on("finish", () => (this.finished = true));
 
 		process.nextTick(() => this.init(error => (this.error = error)));
 	}
@@ -107,7 +111,7 @@ export class RotatingFileStream extends Writable {
 	private rewrite(chunk: Chunk, callback: Callback): void {
 		const destroy = (error: Error): void => {
 			this.writing = false;
-			if(! this.destroy) this.destroy();
+			if(! this.destroyed) this.destroy();
 
 			return callback(error);
 		};
@@ -150,7 +154,7 @@ export class RotatingFileStream extends Writable {
 		this.stat(this.filename, (error, stats) => {
 			if(error) return error.code === "ENOENT" ? this.open(this.filename, false, 0, done) : done(error);
 
-			if(! stats.isFile()) return done(new Error("Can't write on: " + self.name + " (it is not a file)"));
+			if(! stats.isFile()) return done(new Error(`Can't write on: ${this.filename} (it is not a file)`));
 
 			/*
 			if(self.options.initialRotation) {
@@ -228,7 +232,7 @@ export class RotatingFileStream extends Writable {
 		this.size = 0;
 		this.rotation = this.now();
 
-		this.emit("rotation", this.filename);
+		this.emit("rotation");
 		this.clear();
 		this.close(() => this.move(false, callback));
 		//this._close(this.options.rotate ? this.classical.bind(this, this.options.rotate) : this.options.immutable ? this.immutate.bind(this) : this.move.bind(this));
@@ -245,7 +249,7 @@ export class RotatingFileStream extends Writable {
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
 		let count = 1;
-		let filename = this.filename + "." + count + ".rfs.tmp";
+		let filename = `${this.filename}.${count}.rfs.tmp`;
 
 		for(var i in attempts) count += attempts[i];
 

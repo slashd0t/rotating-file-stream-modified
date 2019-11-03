@@ -1,67 +1,61 @@
 "use strict";
 
-var assert = require("assert");
-var exec = require("./helper").exec;
-var fs = require("fs");
-var rfs = require("./helper").rfs;
+import { createStream } from "..";
+import { deepStrictEqual as deq, strictEqual as eq, throws as ex } from "assert";
+import { readFileSync } from "fs";
+import { test } from "./helper";
 
-describe("errors", function() {
-	describe("wrong name generator (first time)", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "10B" }, function() {
-					throw new Error("test");
-				});
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "test");
-		});
+describe("errors", () => {
+	describe("wrong name generator (first time)", () => {
+		it("wrong filename type", () =>
+			ex(
+				() =>
+					createStream(() => {
+						throw new Error("test");
+					}),
+				Error("test")
+			));
 	});
 
-	describe("wrong name generator (rotation)", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "15B" }, function(time) {
+	describe("wrong name generator (rotation)", () => {
+		const events = test(
+			{
+				filename: (time: Date) => {
 					if(time) throw new Error("test");
 					return "test.log";
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
-		});
+				},
+				options: { size: "15B" }
+			},
+			rfs => {
+				[0, 0, 0, 0].map(() => rfs.write("test\n"));
+				rfs.end("test\n");
+			}
+		);
 
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "test");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("1 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 1);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\ntest\ntest\n");
-		});
+		it("events", () => deq(events, { close: 1, error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1, writev: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\ntest\ntest\n"));
 	});
 
+	xdescribe("wrong name generator (immutable)", () => {
+		const events = test(
+			{
+				filename: (time: Date) => {
+					if(time) throw new Error("test");
+					return "test.log";
+				},
+				options: { size: "15B" }
+			},
+			rfs => {
+				[0, 0, 0, 0].map(() => rfs.write("test\n"));
+				rfs.end("test\n");
+			}
+		);
+
+		it("events", () => deq(events, { error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1, writev: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\ntest\ntest\n"));
+	});
+
+	/*
 	describe("wrong name generator (immutable)", function() {
 		before(function(done) {
 			var self = this;
@@ -101,36 +95,21 @@ describe("errors", function() {
 			assert.equal(fs.readFileSync("test.log"), "test\n");
 		});
 	});
+	*/
 
-	describe("logging on directory", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "5B" }, "test");
-			});
-		});
+	describe("logging on directory", () => {
+		const events = test({ filename: "test", options: { size: "5B" } }, rfs => rfs.write("test\n"));
 
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "Can't write on: test (it is not a file)");
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("0 single write", function() {
-			assert.equal(this.rfs.ev.single, 0);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
+		it("events", () => deq(events, { close: 1, error: ["Can't write on: test (it is not a file)"], finish: 1, write: 1 }));
 	});
 
+	xdescribe("logging on directory (immutable)", () => {
+		const events = test({ filename: "test", options: { size: "5B" } }, rfs => rfs.write("test\n"));
+
+		it("events", () => deq(events, { close: 1, error: ["Can't write on: test (it is not a file)"], finish: 1, write: 1 }));
+	});
+
+	/*
 	describe("logging on directory (immutable)", function() {
 		before(function(done) {
 			var self = this;
@@ -161,7 +140,15 @@ describe("errors", function() {
 			assert.equal(this.rfs.ev.multi, 0);
 		});
 	});
+	*/
 
+	describe("using file as directory", () => {
+		const events = test({ filename: "index.ts/test.log", options: { size: "5B" } }, rfs => rfs.write("test\n"));
+
+		it("events", () => deq(events, { close: 1, error: ["ENOTDIR"], finish: 1, write: 1 }));
+	});
+
+	/*
 	describe("using file as directory", function() {
 		before(function(done) {
 			var self = this;
@@ -715,4 +702,5 @@ describe("errors", function() {
 			assert.equal(this.rfs.ev.multi, 0);
 		});
 	});
+	*/
 });

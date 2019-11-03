@@ -84,15 +84,13 @@ export function test(opt: any, test: (rfs: any) => void): any {
 				events[name].push(what);
 			};
 
-			rfs.on("close", end);
-			rfs.on("finish", end);
-
 			rfs.on("close", () => inc("close"));
-			rfs.on("error", err => push("error", err.message));
+			rfs.on("error", error => push("error", "code" in error ? error["code"] : error.message));
+			rfs.on("finish", end);
 			rfs.on("finish", () => inc("finish"));
 			rfs.on("open", filename => push("open", filename));
 			rfs.on("rotated", filename => push("rotated", filename));
-			rfs.on("rotation", filename => push("rotation", filename));
+			rfs.on("rotation", () => inc("rotation"));
 			rfs.on("warning", err => push("warning", err.message));
 
 			const oldw = rfs._write;

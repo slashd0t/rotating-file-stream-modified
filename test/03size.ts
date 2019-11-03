@@ -10,7 +10,7 @@ describe("size", () => {
 			rfs.end("test\n");
 		});
 
-		it("events", () => deq(events, { finish: 1, open: ["test.log"], rotated: ["1-test.log"], rotation: ["test.log"], write: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
@@ -20,7 +20,7 @@ describe("size", () => {
 			rfs.end("test\n");
 		});
 
-		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: ["test.log"], write: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
@@ -32,7 +32,7 @@ describe("size", () => {
 			rfs.end("test\n");
 		});
 
-		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: ["test.log"], write: 1, writev: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1, writev: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
@@ -44,7 +44,7 @@ describe("size", () => {
 			rfs.end("test\n");
 		});
 
-		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: ["test.log"], write: 1, writev: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1, writev: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\ntest\ntest\n"));
 	});
