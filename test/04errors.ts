@@ -3,6 +3,7 @@
 import { deepStrictEqual as deq, strictEqual as eq, throws as ex } from "assert";
 import { createStream } from "..";
 import { readFileSync } from "fs";
+import { sep } from "path";
 import { test } from "./helper";
 
 describe("errors", () => {
@@ -143,7 +144,7 @@ describe("errors", () => {
 	*/
 
 	describe("using file as directory", () => {
-		const events = test({ filename: "index.ts/test.log", options: { size: "5B" } }, rfs => rfs.write("test\n"));
+		const events = test({ filename: `index.ts${sep}test.log`, options: { size: "5B" } }, rfs => rfs.write("test\n"));
 
 		it("events", () => deq(events, { close: 1, error: ["ENOTDIR"], finish: 1, write: 1 }));
 	});
@@ -182,93 +183,33 @@ describe("errors", () => {
 		it("events", () => deq(events, { close: 1, error: ["test.log1-test.log"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
 	});
 
+	describe("error creating missing path (first open)", function() {
+		const filename = `log${sep}t${sep}test.log`;
+		const rotated = `log${sep}t${sep}t${sep}test.log`;
+		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
+			rfs.mkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)));
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () => deq(events, { close: 1, error: [`test log${sep}t`], finish: 1, write: 1 }));
+	});
+
+	describe("error creating missing path (rotation)", function() {
+		const filename = `log${sep}t${sep}test.log`;
+		const rotated = `log${sep}t${sep}t${sep}test.log`;
+		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
+			rfs.on("rotation", () => (rfs.mkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)))));
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () => deq(events, { close: 1, error: [`test log${sep}t${sep}t`], finish: 1, open: [filename], rotation: 1, write: 1, writev: 1 }));
+	});
+
 	/*
-	describe("error creating missing path in first open", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				var mkdir = fs.mkdir;
-				fs.mkdir = function(path, callback) {
-					process.nextTick(callback.bind(null, { code: "EACCES" }));
-				};
-				self.rfs = rfs(
-					function() {
-						fs.mkdir = mkdir;
-						done();
-					},
-					{},
-					function() {
-						return "log/t/test.log";
-					}
-				);
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.code, "EACCES");
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("0 single write", function() {
-			assert.equal(this.rfs.ev.single, 0);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
-	describe("error creating missing path in rotation", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				var mkdir = fs.mkdir;
-				fs.mkdir = function(path, callback) {
-					process.nextTick(callback.bind(null, { code: "EACCES" }));
-				};
-				self.rfs = rfs(
-					function() {
-						fs.mkdir = mkdir;
-						done();
-					},
-					{ size: "5B" },
-					function(time) {
-						if(time) return "log/t/test.log";
-						return "test.log";
-					}
-				);
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.code, "EACCES");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
 	describe("error on no rotated file open", function() {
 		before(function(done) {
 			var self = this;

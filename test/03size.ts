@@ -2,6 +2,7 @@
 
 import { deepStrictEqual as deq, strictEqual as eq } from "assert";
 import { readFileSync } from "fs";
+import { sep } from "path";
 import { test } from "./helper";
 
 describe("size", () => {
@@ -50,16 +51,16 @@ describe("size", () => {
 	});
 
 	describe("missing path creation", function() {
-		const events = test({ filename: (time: Date): string => (time ? "log/t/rot/test.log" : "log/t/test.log"), options: { size: "10B" } }, rfs =>
-			rfs.once("open", () => {
-				rfs.write("test\n");
-				rfs.write("test\n");
-				rfs.end("test\n");
-			})
-		);
+		const filename = `log${sep}t${sep}test.log`;
+		const rotated = `log${sep}t${sep}t${sep}test.log`;
+		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
 
-		it("events", () => deq(events, { finish: 1, open: ["log/t/test.log", "log/t/test.log"], rotated: ["log/t/rot/test.log"], rotation: 1, write: 1, writev: 1 }));
-		it("file content", () => eq(readFileSync("log/t/test.log", "utf8"), "test\n"));
-		it("rotated file content", () => eq(readFileSync("log/t/rot/test.log", "utf8"), "test\ntest\n"));
+		it("events", () => deq(events, { finish: 1, open: [filename, filename], rotated: [rotated], rotation: 1, write: 1, writev: 1 }));
+		it("file content", () => eq(readFileSync(filename, "utf8"), "test\n"));
+		it("rotated file content", () => eq(readFileSync(rotated, "utf8"), "test\ntest\n"));
 	});
 });
