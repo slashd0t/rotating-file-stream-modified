@@ -1,7 +1,7 @@
 "use strict";
 
-import { createStream } from "..";
 import { deepStrictEqual as deq, strictEqual as eq, throws as ex } from "assert";
+import { createStream } from "..";
 import { readFileSync } from "fs";
 import { test } from "./helper";
 
@@ -183,50 +183,6 @@ describe("errors", () => {
 	});
 
 	/*
-	describe("missing path creation", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "10B" }, function(time) {
-					if(time) return "log/t/rot/test.log";
-					return "log/t/test.log";
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-			assert.equal(this.rfs.ev.rotated[0], "log/t/rot/test.log");
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("1 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 1);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("log/t/test.log"), "test\n");
-		});
-
-		it("rotated file content", function() {
-			assert.equal(fs.readFileSync("log/t/rot/test.log"), "test\ntest\n");
-		});
-	});
-
 	describe("error creating missing path in first open", function() {
 		before(function(done) {
 			var self = this;

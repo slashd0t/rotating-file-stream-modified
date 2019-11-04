@@ -1,6 +1,7 @@
 "use strict";
 
-import { Stats, createWriteStream, rename, stat } from "fs";
+import { Stats, createWriteStream, mkdir, rename, stat } from "fs";
+import { parse, sep } from "path";
 import { TextDecoder } from "util";
 import { Writable } from "stream";
 
@@ -58,6 +59,7 @@ export class RotatingFileStream extends Writable {
 	private filename: string;
 	private finished: boolean;
 	private generator: Generator;
+	private mkdir: (path: string, callback: Callback) => void;
 	private opened: () => void;
 	private options: Options;
 	private ready: boolean;
@@ -77,6 +79,7 @@ export class RotatingFileStream extends Writable {
 		this.createWriteStream = createWriteStream;
 		this.filename = generator(null);
 		this.generator = generator;
+		this.mkdir = mkdir;
 		this.options = options;
 		this.rename = rename;
 		this.stat = stat;
@@ -180,6 +183,19 @@ export class RotatingFileStream extends Writable {
 		});
 	}
 
+	private makePath(name: string, callback: Callback): void {
+		const dir = parse(name).dir;
+
+		this.mkdir(dir, (error: NodeJS.ErrnoException): void => {
+			if(error) {
+				if(error.code === "ENOENT") return this.makePath(dir, (error: Error): void => (error ? callback(error) : this.makePath(name, callback)));
+				if(error.code !== "EEXIST") return callback(error);
+			}
+
+			callback();
+		});
+	}
+
 	private open(filename: string, retry: boolean, size: number, callback: Callback): void {
 		const options: any = { flags: "a" };
 
@@ -203,17 +219,9 @@ export class RotatingFileStream extends Writable {
 			this.emit("open", filename);
 		});
 
-		this.stream.once("error", (error: NodeJS.ErrnoException) => {
-			if(error.code !== "ENOENT" || retry) return end(error);
-
-			/*
-			utils.makePath(self.name, function(err) {
-				if(err) return callback(err);
-
-				self.open(true);
-			});
-			*/
-		});
+		this.stream.once("error", (error: NodeJS.ErrnoException) =>
+			error.code !== "ENOENT" || retry ? end(error) : this.makePath(filename, (error: Error): void => (error ? callback(error) : this.open(filename, true, size, end)))
+		);
 	}
 
 	private close(callback: Callback): void {
@@ -322,13 +330,7 @@ export class RotatingFileStream extends Writable {
 
 				if(! error) return done();
 
-				/*
-				utils.makePath(name, function(err) {
-					if(err) return callback(err);
-
-					self.move(true);
-				});
-				*/
+				this.makePath(filename, (error: Error): void => (error ? callback(error) : this.move(true, callback)));
 			});
 		});
 	}

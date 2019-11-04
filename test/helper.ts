@@ -1,6 +1,6 @@
 "use strict";
 
-import { Stats, createWriteStream, readdir, stat, unlink } from "fs";
+import { Stats, createWriteStream, readdir, rmdir, stat, unlink } from "fs";
 import { createStream } from "..";
 import { sep } from "path";
 
@@ -24,13 +24,10 @@ function recursiveRemove(path: string, done: () => any): any {
 	const notRoot: boolean = path !== ".";
 
 	stat(path, (err: Error, stats: Stats): any => {
+		const rm = (): void => (notRoot ? (stats.isFile() ? unlink : rmdir)(path, err => (err ? process.stderr.write(`Error deleting '${path}': ${err.message}\n`, done) : done())) : done());
+
 		if(err) return process.stderr.write(`Error getting stats for '${path}': ${err.message}\n`, done);
-		if(stats.isFile()) {
-			return unlink(path, err => {
-				if(err) return process.stderr.write(`Error deleting '${path}': ${err.message}\n`, done);
-				done();
-			});
-		}
+		if(stats.isFile()) return rm();
 		if(! stats.isDirectory()) return process.stderr.write(`'${path}': Unknown file type`, done);
 
 		readdir(path, (err, files) => {
@@ -39,7 +36,7 @@ function recursiveRemove(path: string, done: () => any): any {
 			let count = 0;
 			let total = 0;
 
-			const callback: () => void = () => (++count === total ? done() : null);
+			const callback: () => void = () => (++count === total ? rm() : null);
 
 			files.map(file => {
 				if(notRoot || file.match(/(gz|log|tmp|txt)$/)) {
@@ -48,7 +45,7 @@ function recursiveRemove(path: string, done: () => any): any {
 				}
 			});
 
-			if(total === 0) done();
+			if(total === 0) rm();
 		});
 	});
 }
