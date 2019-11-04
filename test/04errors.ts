@@ -148,192 +148,41 @@ describe("errors", () => {
 		it("events", () => deq(events, { close: 1, error: ["ENOTDIR"], finish: 1, write: 1 }));
 	});
 
+	describe("no rotated file available", () => {
+		const events = test({ filename: () => "test.log", options: { size: "5B" } }, rfs => rfs.write("test\n"));
+
+		it("events", () => deq(events, { close: 1, error: ["RFS-TOO-MANY"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
+
+	describe("no rotated file available", () => {
+		const events = test({ filename: () => "test.log", files: { "test.log": "test\n" }, options: { size: "5B" } }, rfs => rfs.write("test\n"));
+
+		it("events", () => deq(events, { close: 1, error: ["RFS-TOO-MANY"], finish: 1, rotation: 1, write: 1 }));
+	});
+
+	describe("error while write", () => {
+		const events = test({ options: { interval: "10d" } }, rfs =>
+			rfs.once("open", () => {
+				rfs.stream.write = (buffer: string, encoding: string, callback: any): void => {
+					process.nextTick(() => callback(new Error(encoding + buffer)));
+				};
+				rfs.write("test\n");
+			})
+		);
+
+		it("events", () => deq(events, { close: 1, error: ["buffertest\n"], finish: 1, open: ["test.log"], write: 1 }));
+	});
+
+	describe("error while rename", () => {
+		const events = test({ options: { size: "5B" } }, rfs => {
+			rfs.rename = (a: string, b: string, callback: any): void => process.nextTick(() => callback(new Error(a + b)));
+			rfs.once("open", () => rfs.write("test\n"));
+		});
+
+		it("events", () => deq(events, { close: 1, error: ["test.log1-test.log"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
+
 	/*
-	describe("using file as directory", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "5B" }, "index.js/test.log");
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.code, "ENOTDIR");
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("0 single write", function() {
-			assert.equal(this.rfs.ev.single, 0);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
-	describe("no rotated file available", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { size: "5B" }, function(time, index) {
-					return "test.log";
-				});
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "Too many destination file attempts");
-			assert.equal(this.rfs.err.attempts["test.log"], 1000);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-	});
-
-	describe("no rotated file available (initial rotation)", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > test.log", function() {
-				self.rfs = rfs(done, { size: "5B" }, function(time, index) {
-					return "test.log";
-				});
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "Too many destination file attempts");
-			assert.equal(this.rfs.err.attempts["test.log"], 1000);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("0 single write", function() {
-			assert.equal(this.rfs.ev.single, 0);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-	});
-
-	describe("error while write", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { interval: "10d" });
-				self.rfs.once("open", function() {
-					self.rfs.stream.write = function(buffer, callback) {
-						process.nextTick(callback.bind(null, new Error("Test error")));
-					};
-					self.rfs.end("test\n");
-				});
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "Test error");
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "");
-		});
-	});
-
-	describe("error while rename", function() {
-		before(function(done) {
-			var self = this;
-			var oldR = fs.rename;
-			fs.rename = function(a, b, callback) {
-				process.nextTick(callback.bind(null, new Error("Test error")));
-			};
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(
-					function() {
-						fs.rename = oldR;
-						done();
-					},
-					{ size: "5B" }
-				);
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "Test error");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-	});
-
 	describe("missing path creation", function() {
 		before(function(done) {
 			var self = this;

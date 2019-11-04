@@ -278,7 +278,7 @@ export class RotatingFileStream extends Writable {
 
 		this.stat(filename, err => {
 			if(! err || err.code !== "ENOENT") {
-				attempts[attempts] = 1;
+				attempts[filename] = 1;
 
 				return this.findName(attempts, tmp, callback);
 			}
