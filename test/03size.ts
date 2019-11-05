@@ -7,9 +7,7 @@ import { test } from "./helper";
 
 describe("size", () => {
 	describe("initial rotation", () => {
-		const events = test({ files: { "test.log": "test\ntest\n" }, options: { size: "10B" } }, rfs => {
-			rfs.end("test\n");
-		});
+		const events = test({ files: { "test.log": "test\ntest\n" }, options: { size: "10B" } }, rfs => rfs.end("test\n"));
 
 		it("events", () => deq(events, { finish: 1, open: ["test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
@@ -17,9 +15,7 @@ describe("size", () => {
 	});
 
 	describe("single write rotation by size", () => {
-		const events = test({ files: { "test.log": "test\n" }, options: { size: "10B" } }, rfs => {
-			rfs.end("test\n");
-		});
+		const events = test({ files: { "test.log": "test\n" }, options: { size: "10B" } }, rfs => rfs.end("test\n"));
 
 		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));

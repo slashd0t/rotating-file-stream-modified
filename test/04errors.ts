@@ -183,7 +183,7 @@ describe("errors", () => {
 		it("events", () => deq(events, { close: 1, error: ["test.log1-test.log"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
 	});
 
-	describe("error creating missing path (first open)", function() {
+	describe("error creating missing path (first open)", () => {
 		const filename = `log${sep}t${sep}test.log`;
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
@@ -196,7 +196,7 @@ describe("errors", () => {
 		it("events", () => deq(events, { close: 1, error: [`test log${sep}t`], finish: 1, write: 1 }));
 	});
 
-	describe("error creating missing path (rotation)", function() {
+	describe("error creating missing path (rotation)", () => {
 		const filename = `log${sep}t${sep}test.log`;
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
@@ -209,47 +209,20 @@ describe("errors", () => {
 		it("events", () => deq(events, { close: 1, error: [`test log${sep}t${sep}t`], finish: 1, open: [filename], rotation: 1, write: 1, writev: 1 }));
 	});
 
-	/*
-	describe("error on no rotated file open", function() {
-		before(function(done) {
-			var self = this;
-			var oldC = fs.createWriteStream;
-			fs.createWriteStream = function() {
-				return {
-					once: function(event, callback) {
-						if(event === "error") setTimeout(callback.bind(null, { code: "TEST" }), 50);
-					}
-				};
-			};
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(function() {
-					fs.createWriteStream = oldC;
-					done();
-				});
+	describe("error on no rotated file open", () => {
+		const filename = `log${sep}t${sep}test.log`;
+		const rotated = `log${sep}t${sep}t${sep}test.log`;
+		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
+			rfs.createWriteStream = (): any => ({
+				once: (event: string, callback: (error: any) => void): any => (event === "error" ? setTimeout(() => callback({ code: "TEST" }), 50) : null)
 			});
+			rfs.write("test\n");
 		});
 
-		it("Error", function() {
-			assert.equal(this.rfs.err.code, "TEST");
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("0 single write", function() {
-			assert.equal(this.rfs.ev.single, 0);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
+		it("events", () => deq(events, { close: 1, error: ["TEST"], finish: 1, write: 1 }));
 	});
 
+	/*
 	describe("error unlinking file", function() {
 		before(function(done) {
 			var self = this;

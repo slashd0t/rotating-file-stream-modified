@@ -29,12 +29,12 @@ export interface RotatingFileStreamOptions {
 export type Generator = (time: number | Date, index?: number) => string;
 
 interface Options {
-	compress?: boolean | string | ((source: string, dest: string) => string);
+	compress?: string | ((source: string, dest: string) => string);
 	encoding?: string;
 	history?: string;
 	immutable?: boolean;
 	initialRotation?: boolean;
-	interval?: string;
+	interval?: { num: number; unit: string };
 	maxFiles?: number;
 	maxSize?: string;
 	mode?: number;
@@ -59,9 +59,12 @@ export class RotatingFileStream extends Writable {
 	private filename: string;
 	private finished: boolean;
 	private generator: Generator;
+	private maxTimeout: number;
 	private mkdir: (path: string, callback: Callback) => void;
+	private next: number;
 	private opened: () => void;
 	private options: Options;
+	private prev: number;
 	private ready: boolean;
 	private rename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
 	private rotation: Date;
@@ -72,13 +75,14 @@ export class RotatingFileStream extends Writable {
 	private writing: boolean;
 
 	constructor(generator: Generator, options: Options) {
-		const { encoding } = options;
+		const { encoding, path } = options;
 
 		super({ decodeStrings: true, defaultEncoding: encoding });
 
 		this.createWriteStream = createWriteStream;
-		this.filename = generator(null);
+		this.filename = path + generator(null);
 		this.generator = generator;
+		this.maxTimeout = 2147483640;
 		this.mkdir = mkdir;
 		this.options = options;
 		this.rename = rename;
@@ -161,7 +165,7 @@ export class RotatingFileStream extends Writable {
 
 			/*
 			if(self.options.initialRotation) {
-				var prev;
+				const prev;
 
 				self._interval(self.now());
 				prev = self.prev;
@@ -217,6 +221,7 @@ export class RotatingFileStream extends Writable {
 			this.size = size;
 			end();
 			this.emit("open", filename);
+			this.interval();
 		});
 
 		this.stream.once("error", (error: NodeJS.ErrnoException) =>
@@ -256,16 +261,17 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
+		const { path, rotate } = this.options;
 		let count = 1;
 		let filename = `${this.filename}.${count}.rfs.tmp`;
 
-		for(var i in attempts) count += attempts[i];
+		for(const i in attempts) count += attempts[i];
 
 		if(count >= 1000) return callback(this.exhausted(attempts));
 
 		if(! tmp) {
 			try {
-				filename = this.options.rotate ? this.generator(count) : this.generator(this.rotation, count);
+				filename = path + (rotate ? this.generator(count) : this.generator(this.rotation, count));
 				/*
 				if(this.options.rotate) filename = this.generator(count);
 				else if(this.options.interval && ! this.options.rotationTime) pars.unshift(new Date(this.prev));
@@ -320,7 +326,7 @@ export class RotatingFileStream extends Writable {
 			*/
 		};
 
-		this.findName({}, this.options.compress as boolean, (error, found) => {
+		this.findName({}, (this.options.compress as unknown) as boolean, (error, found) => {
 			if(error) return callback(error);
 
 			filename = found;
@@ -340,6 +346,59 @@ export class RotatingFileStream extends Writable {
 			clearTimeout(this.timer);
 			this.timer = null;
 		}
+	}
+
+	private intervalBoundsBig(now: Date): void {
+		let year = now.getFullYear();
+		let month = now.getMonth();
+		let day = now.getDate();
+		let hours = now.getHours();
+		const { num, unit } = this.options.interval;
+
+		if(unit === "M") {
+			day = 1;
+			hours = 0;
+		} else if(unit === "d") hours = 0;
+		else hours = parseInt(((hours / num) as unknown) as string, 10) * num;
+
+		this.prev = new Date(year, month, day, hours, 0, 0, 0).getTime();
+
+		if(unit === "M") month += num;
+		else if(unit === "d") day += num;
+		else hours += num;
+
+		this.next = new Date(year, month, day, hours, 0, 0, 0).getTime();
+	}
+
+	private intervalBounds(now: Date): Date {
+		const unit = this.options.interval.unit;
+
+		if(unit === "M" || unit === "d" || unit === "h") this.intervalBoundsBig(now);
+		else {
+			let period = 1000 * this.options.interval.num;
+
+			if(unit === "m") period *= 60;
+
+			this.prev = parseInt(((now.getTime() / period) as unknown) as string, 10) * period;
+			this.next = this.prev + period;
+		}
+
+		return new Date(this.prev);
+	}
+
+	private interval(): void {
+		if(! this.options.interval) return;
+
+		this.intervalBounds(this.now());
+
+		const set = (): void => {
+			const time = this.next - this.now().getTime();
+
+			this.timer = time > this.maxTimeout ? setTimeout(set, this.maxTimeout) : setTimeout(() => this.rotate(error => (this.error = error)), time);
+			this.timer.unref();
+		};
+
+		set();
 	}
 }
 
@@ -425,7 +484,7 @@ function checkSize(value: string): any {
 }
 
 const checks: any = {
-	compress: (type: string, options: RotatingFileStreamOptions, value: boolean | string | ((source: string, dest: string) => string)): any => {
+	compress: (type: string, options: Options, value: boolean | string | ((source: string, dest: string) => string)): any => {
 		if(! value) throw new Error("A value for 'options.compress' must be specified");
 		if(type === "boolean") return (options.compress = (source: string, dest: string): string => `cat ${source} | gzip -c9 > ${dest}`);
 		if(type === "function") return;
@@ -434,7 +493,7 @@ const checks: any = {
 		if(((value as unknown) as string) !== "gzip") throw new Error(`Don't know how to handle compression method: ${value}`);
 	},
 
-	encoding: (type: string, options: RotatingFileStreamOptions, value: string): any => new TextDecoder(value),
+	encoding: (type: string, options: Options, value: string): any => new TextDecoder(value),
 
 	history: (type: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.history' type: ${type}`);
@@ -452,8 +511,9 @@ const checks: any = {
 
 	mode: (): void => {},
 
-	path: (type: string): void => {
+	path: (type: string, options: Options, value: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.path' type: ${type}`);
+		if(value[value.length - 1] !== sep) options.path = value + sep;
 	},
 
 	rotate: buildNumberCheck("rotate"),
@@ -475,6 +535,8 @@ function checkOptions(options: RotatingFileStreamOptions): Options {
 		ret[opt] = options[opt];
 		checks[opt](type, ret, value);
 	}
+
+	if(! ret.path) ret.path = "";
 
 	if(! ret.interval) {
 		delete ret.immutable;
