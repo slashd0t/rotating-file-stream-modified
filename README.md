@@ -473,7 +473,7 @@ Exported in **TypeScript**.
 
 ```typescript
 import { Writable } from "stream";
-export interface RotatingFileStreamOptions {
+export interface RFSOptions {
   compress?: boolean | string | ((source: string, dest: string) => string);
   encoding?: string;
   history?: string;
@@ -489,8 +489,8 @@ export interface RotatingFileStreamOptions {
   size?: string;
 }
 export declare type Generator = (time: number | Date, index?: number) => string;
-export declare class RotatingFileStream extends Writable {}
-export declare function createStream(filename: string | Generator, options?: RotatingFileStreamOptions): RotatingFileStream;
+export declare class RFS extends Writable {}
+export declare function createStream(filename: string | Generator, options?: RFSOptions): RFS;
 ```
 
 # Licence

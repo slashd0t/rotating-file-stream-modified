@@ -1,6 +1,6 @@
 "use strict";
 
-import { Stats, createWriteStream, readdir, rmdir, stat, unlink } from "fs";
+import { Stats, createWriteStream, futimes, readdir, rmdir, stat, unlink } from "fs";
 import { createStream } from "..";
 import { sep } from "path";
 
@@ -14,7 +14,9 @@ function fillFiles(files: any, done: () => void): void {
 
 	Object.keys(files).map((file: string) => {
 		++empty;
-		createWriteStream(file, "utf8").end(files[file], "utf8", end);
+		const stream = createWriteStream(file, "utf8");
+		if(typeof files[file] === "string") return stream.end(files[file], "utf8", end);
+		stream.write(files[file].content, "utf8", () => {futimes(stream.)});
 	});
 
 	if(empty === 0) done();

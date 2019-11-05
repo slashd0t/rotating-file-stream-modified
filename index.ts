@@ -5,12 +5,12 @@ import { parse, sep } from "path";
 import { TextDecoder } from "util";
 import { Writable } from "stream";
 
-class RotatingFileStreamError extends Error {
+class RFSError extends Error {
 	public attempts: any;
 	public code: string;
 }
 
-export interface RotatingFileStreamOptions {
+export interface RFSOptions {
 	compress?: boolean | string | ((source: string, dest: string) => string);
 	encoding?: string;
 	history?: string;
@@ -52,7 +52,7 @@ interface Chunk {
 	next: Chunk;
 }
 
-export class RotatingFileStream extends Writable {
+export class RFS extends Writable {
 	private createWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
 	private destroyer: () => void;
 	private error: Error;
@@ -159,29 +159,24 @@ export class RotatingFileStream extends Writable {
 		};
 
 		this.stat(this.filename, (error, stats) => {
+			const { initialRotation, interval, size } = this.options;
 			if(error) return error.code === "ENOENT" ? this.open(this.filename, false, 0, done) : done(error);
 
 			if(! stats.isFile()) return done(new Error(`Can't write on: ${this.filename} (it is not a file)`));
 
-			/*
-			if(self.options.initialRotation) {
-				const prev;
+			if(initialRotation) {
+				this.intervalBounds(this.now());
+				const prev = this.prev;
+				this.intervalBounds(new Date(stats.mtime.getTime()));
 
-				self._interval(self.now());
-				prev = self.prev;
-				self._interval(stats.mtime.getTime());
-
-				if(prev !== self.prev) return self.rotate();
+				if(prev !== this.prev) return this.rotate(done);
 			}
-			*/
 
 			this.size = stats.size;
 
-			if(! this.options.size || stats.size < this.options.size) return this.open(this.filename, false, stats.size, done);
+			if(! size || stats.size < size) return this.open(this.filename, false, stats.size, done);
 
-			/*
-			if(self.options.interval) self._interval(self.now());
-			*/
+			if(interval) this.intervalBounds(this.now());
 
 			this.rotate(done);
 		});
@@ -252,7 +247,7 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private exhausted(attempts: any): Error {
-		let err = new RotatingFileStreamError("Too many destination file attempts");
+		let err = new RFSError("Too many destination file attempts");
 		err.code = "RFS-TOO-MANY";
 
 		if(attempts) err.attempts = attempts;
@@ -261,7 +256,7 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
-		const { path, rotate } = this.options;
+		const { interval, path, rotate, rotationTime } = this.options;
 		let count = 1;
 		let filename = `${this.filename}.${count}.rfs.tmp`;
 
@@ -271,14 +266,7 @@ export class RotatingFileStream extends Writable {
 
 		if(! tmp) {
 			try {
-				filename = path + (rotate ? this.generator(count) : this.generator(this.rotation, count));
-				/*
-				if(this.options.rotate) filename = this.generator(count);
-				else if(this.options.interval && ! this.options.rotationTime) pars.unshift(new Date(this.prev));
-				else pars.unshift(this.rotation);
-
-				name = this.generator.apply(this, pars);
-				*/
+				filename = path + (rotate ? this.generator(count) : this.generator(interval && ! rotationTime ? new Date(this.prev) : this.rotation, count));
 			} catch(e) {
 				return callback(e);
 			}
@@ -316,12 +304,12 @@ export class RotatingFileStream extends Writable {
 
 			open();
 			/*
-			//self.open();
+			//this.open();
 
-			if(this.options.compress) self.compress(name);
+			if(this.options.compress) this.compress(name);
 			else {
-				self.emit("rotated", filename);
-				self.interval();
+				this.emit("rotated", filename);
+				this.interval();
 			}
 			*/
 		};
@@ -402,8 +390,8 @@ export class RotatingFileStream extends Writable {
 	}
 }
 
-function buildNumberCheck(field: string): (type: string, options: RotatingFileStreamOptions, value: string) => void {
-	return (type: string, options: RotatingFileStreamOptions, value: string): void => {
+function buildNumberCheck(field: string): (type: string, options: RFSOptions, value: string) => void {
+	return (type: string, options: RFSOptions, value: string): void => {
 		const converted: number = parseInt(value, 10);
 
 		if(type !== "number" || (converted as unknown) !== value || converted <= 0) throw new Error(`'${field}' option must be a positive integer number`);
@@ -411,7 +399,7 @@ function buildNumberCheck(field: string): (type: string, options: RotatingFileSt
 }
 
 function buildStringCheck(field: string, check: (value: string) => any) {
-	return (type: string, options: RotatingFileStreamOptions, value: string): void => {
+	return (type: string, options: RFSOptions, value: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.${field}' type: ${type}`);
 
 		options[field] = check(value);
@@ -523,7 +511,7 @@ const checks: any = {
 	size: buildStringCheck("size", checkSize)
 };
 
-function checkOptions(options: RotatingFileStreamOptions): Options {
+function checkOptions(options: RFSOptions): Options {
 	const ret: Options = {};
 
 	for(const opt in options) {
@@ -574,7 +562,7 @@ function createGenerator(filename: string): Generator {
 	};
 }
 
-export function createStream(filename: string | Generator, options?: RotatingFileStreamOptions): RotatingFileStream {
+export function createStream(filename: string | Generator, options?: RFSOptions): RFS {
 	if(typeof options === "undefined") options = {};
 	else if(typeof options !== "object") throw new Error(`The "options" argument must be of type object. Received type ${typeof options}`);
 
@@ -586,5 +574,5 @@ export function createStream(filename: string | Generator, options?: RotatingFil
 	else if(typeof filename === "function") generator = filename;
 	else throw new Error(`The "filename" argument must be one of type string or function. Received type ${typeof filename}`);
 
-	return new RotatingFileStream(generator, opts);
+	return new RFS(generator, opts);
 }

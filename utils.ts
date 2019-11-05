@@ -33,9 +33,9 @@ const readme: (err: Error, data: string) => void = (err, data) => {
 					begin = true;
 					data.split("\n").map((line: string) => {
 						if(! first) return (first = true);
-						if(interf) return (interf = ! line.match(/}/));
+						if(interf) return (interf = ! line.match(/}$/));
 						if(line.match(/interface Chunk/) || line.match(/interface Options/)) return (interf = true);
-						if(line.match(/class RotatingFileStream/)) interf = ((line = line.replace("{", "{}")) as unknown) as boolean;
+						if(line.match(/class RFS/)) interf = ((line = line.replace("{", "{}")) as unknown) as boolean;
 						if(! line.match(/Callback/) && ! line.match(/export \{}/)) output.push(line.replace("    ", "  "));
 					});
 					output.pop();
