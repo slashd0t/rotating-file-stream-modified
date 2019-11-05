@@ -28,90 +28,34 @@ describe("interval", () => {
 	});
 
 	describe("initialRotation option", () => {
-		const events = test({ filename: "test.log", files: { "test.log": "test\n" }, options: { size: "10B", interval: "1d", initialRotation: true } }, rfs => {
-			rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
-			rfs.end("test\n");
-		});
+		const events = test(
+			{ filename: "test.log", files: { "test.log": { content: "test\n", date: new Date(2015, 0, 23, 1, 29, 23, 123) } }, options: { size: "10B", interval: "1d", initialRotation: true } },
+			rfs => {
+				rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
+				rfs.end("test\n");
+			}
+		);
 
-		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["20150329-0129-01-test.log"], rotation: 1, write: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], rotated: ["20150123-0000-01-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
-		it("rotated file content", () => eq(readFileSync("20150329-0129-01-test.log", "utf8"), "test\n"));
+		it("rotated file content", () => eq(readFileSync("20150123-0000-01-test.log", "utf8"), "test\n"));
+	});
+
+	describe("initialRotation option but ok", () => {
+		const events = test(
+			{ filename: "test.log", files: { "test.log": { content: "test\n", date: new Date(2015, 2, 29, 1, 0, 0, 0) } }, options: { size: "10B", interval: "1d", initialRotation: true } },
+			rfs => {
+				rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
+				rfs.end("test\n");
+			}
+		);
+
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["20150329-0000-01-test.log"], rotation: 1, write: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
+		it("rotated file content", () => eq(readFileSync("20150329-0000-01-test.log", "utf8"), "test\ntest\n"));
 	});
 
 	/*
-	describe("initialRotation option", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > test.log ; touch -t 197601231500 test.log", function() {
-				self.rfs = rfs(done, { interval: "1m", initialRotation: true }, utils.createGenerator("test.log"));
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-			assert.equal(this.rfs.ev.rotated[0], "19760123-1500-01-test.log");
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-
-		it("rotated file content", function() {
-			assert.equal(fs.readFileSync("19760123-1500-01-test.log"), "test\n");
-		});
-	});
-
-	describe("initialRotation option but ok", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > test.log", function() {
-				self.rfs = rfs(done, { interval: "1m", initialRotation: true }, utils.createGenerator("test.log"));
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("0 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 0);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\ntest\n");
-		});
-	});
-
 	describe("_write while rotation", function() {
 		before(function(done) {
 			var self = this;
