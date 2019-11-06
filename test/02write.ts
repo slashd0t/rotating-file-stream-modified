@@ -45,7 +45,7 @@ describe("write(s)", () => {
 			rfs.write("test\n");
 		});
 
-		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"], open: ["test.log"] }));
+		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"] }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
 	});
 

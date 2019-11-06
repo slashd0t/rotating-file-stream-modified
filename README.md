@@ -21,9 +21,9 @@ rotated. Rotation behaviour can be deeply customized; optionally, classical UNIX
 ```javascript
 const rfs = require("rotating-file-stream");
 const stream = rfs.createStream("file.log", {
-	size: "10M", // rotate every 10 MegaBytes written
-	interval: "1d", // rotate daily
-	compress: "gzip" // compress rotated files
+  size: "10M", // rotate every 10 MegaBytes written
+  interval: "1d", // rotate daily
+  compress: "gzip" // compress rotated files
 });
 ```
 
@@ -129,20 +129,20 @@ An example of a complex _rotated file name generator_ function could be:
 ```javascript
 const pad = num => (num > 9 ? "" : "0") + num;
 const generator = (time, index) => {
-	if (!time) return "file.log";
+  if (!time) return "file.log";
 
-	var month = time.getFullYear() + "" + pad(time.getMonth() + 1);
-	var day = pad(time.getDate());
-	var hour = pad(time.getHours());
-	var minute = pad(time.getMinutes());
+  var month = time.getFullYear() + "" + pad(time.getMonth() + 1);
+  var day = pad(time.getDate());
+  var hour = pad(time.getHours());
+  var minute = pad(time.getMinutes());
 
-	return `${month}${day}-${hour}${minute}-${index}-file.log`;
+  return `${month}${day}-${hour}${minute}-${index}-file.log`;
 };
 
 const rfs = require("rotating-file-stream");
 const stream = rfs(generator, {
-	size: "10M",
-	interval: "30m"
+  size: "10M",
+  interval: "30m"
 });
 ```
 
@@ -333,18 +333,18 @@ The two following code snippets have exactly the same effect:
 ```javascript
 var rfs = require("rotating-file-stream");
 var stream = rfs("file.log", {
-	size: "10M",
-	compress: true
+  size: "10M",
+  compress: true
 });
 ```
 
 ```javascript
 var rfs = require("rotating-file-stream");
 var stream = rfs("file.log", {
-	size: "10M",
-	compress: function(source, dest) {
-		return "cat " + source + " | gzip -c9 > " + dest;
-	}
+  size: "10M",
+  compress: function(source, dest) {
+    return "cat " + source + " | gzip -c9 > " + dest;
+  }
 });
 ```
 
@@ -473,8 +473,10 @@ Exported in **TypeScript**.
 
 ```typescript
 import { Writable } from "stream";
-export interface RFSOptions {
-  compress?: boolean | string | ((source: string, dest: string) => string);
+export declare type Compressor = (source: string, dest: string) => string;
+export declare type Generator = (time: number | Date, index?: number) => string;
+export interface Options {
+  compress?: boolean | string | Compressor;
   encoding?: string;
   history?: string;
   immutable?: boolean;
@@ -488,9 +490,8 @@ export interface RFSOptions {
   rotationTime?: boolean;
   size?: string;
 }
-export declare type Generator = (time: number | Date, index?: number) => string;
-export declare class RFS extends Writable {}
-export declare function createStream(filename: string | Generator, options?: RFSOptions): RFS;
+export declare class RotatingFileStream extends Writable {}
+export declare function createStream(filename: string | Generator, options?: Options): RotatingFileStream;
 ```
 
 # Licence

@@ -214,6 +214,7 @@ describe("errors", () => {
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
 			rfs.createWriteStream = (): any => ({
+				end:  (): void => {},
 				once: (event: string, callback: (error: any) => void): any => (event === "error" ? setTimeout(() => callback({ code: "TEST" }), 50) : null)
 			});
 			rfs.write("test\n");

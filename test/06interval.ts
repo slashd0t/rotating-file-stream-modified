@@ -55,96 +55,24 @@ describe("interval", () => {
 		it("rotated file content", () => eq(readFileSync("20150329-0000-01-test.log", "utf8"), "test\ntest\n"));
 	});
 
-	/*
-	describe("_write while rotation", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > test.log", function() {
-				self.rfs = rfs(done, { interval: "1s" });
-				self.rfs.once("rotation", self.rfs.end.bind(self.rfs, "test\n"));
-			});
-		});
+	describe("_write while rotation", () => {
+		const events = test({ files: { "test.log": "test\ntest\n" }, options: { interval: "1s" } }, rfs => rfs.on("rotation", () => rfs.end("test\n")));
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-			assert.equal(this.rfs.ev.rotated[0], "1-test.log");
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			var cnt = fs.readFileSync("test.log").toString();
-			assert.equal(cnt, "test\n");
-		});
-
-		it("rotated file content", function() {
-			var cnt = fs.readFileSync("1-test.log").toString();
-			assert.equal(cnt, "test\n");
-		});
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
+		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
 
-	describe("rotation while _write", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > test.log", function() {
-				self.rfs = rfs(done, { interval: "1s" });
-				self.rfs.once("open", function() {
-					var stream = self.rfs.stream;
-					var prev = stream._write;
-					stream._write = function(chunk, encoding, callback) {
-						self.rfs.once("rotation", prev.bind(stream, chunk, encoding, callback));
-					};
+	describe("_write while rotation", () => {
+		const events = test({ files: { "test.log": "test\ntest\n" }, options: { interval: "1s" } }, rfs => {
+			const prev = rfs._write;
+			rfs._write = (chunk: any, encoding: any, callback: any): any => rfs.once("rotation", prev.bind(rfs, chunk, encoding, callback));
 
-					self.rfs.write("test\n");
-					self.rfs.end("test\n");
-				});
-			});
+			rfs.end("test\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-			assert.equal(this.rfs.ev.rotated[0], "1-test.log");
-		});
-
-		it("2 single write", function() {
-			assert.equal(this.rfs.ev.single, 2);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-
-		it("file content", function() {
-			var cnt = fs.readFileSync("test.log").toString();
-			assert.equal(cnt, "test\n");
-		});
-
-		it("rotated file content", function() {
-			var cnt = fs.readFileSync("1-test.log").toString();
-			assert.equal(cnt, "test\ntest\n");
-		});
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
+		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
-	*/
 });

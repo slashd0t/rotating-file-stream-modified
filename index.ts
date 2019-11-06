@@ -5,13 +5,16 @@ import { parse, sep } from "path";
 import { TextDecoder } from "util";
 import { Writable } from "stream";
 
-class RFSError extends Error {
+class RotatingFileStreamError extends Error {
 	public attempts: any;
 	public code: string;
 }
 
-export interface RFSOptions {
-	compress?: boolean | string | ((source: string, dest: string) => string);
+export type Compressor = (source: string, dest: string) => string;
+export type Generator = (time: number | Date, index?: number) => string;
+
+export interface Options {
+	compress?: boolean | string | Compressor;
 	encoding?: string;
 	history?: string;
 	immutable?: boolean;
@@ -26,10 +29,8 @@ export interface RFSOptions {
 	size?: string;
 }
 
-export type Generator = (time: number | Date, index?: number) => string;
-
-interface Options {
-	compress?: string | ((source: string, dest: string) => string);
+interface Opts {
+	compress?: string | Compressor;
 	encoding?: string;
 	history?: string;
 	immutable?: boolean;
@@ -52,7 +53,7 @@ interface Chunk {
 	next: Chunk;
 }
 
-export class RFS extends Writable {
+export class RotatingFileStream extends Writable {
 	private createWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
 	private destroyer: () => void;
 	private error: Error;
@@ -63,18 +64,17 @@ export class RFS extends Writable {
 	private mkdir: (path: string, callback: Callback) => void;
 	private next: number;
 	private opened: () => void;
-	private options: Options;
+	private options: Opts;
 	private prev: number;
-	private ready: boolean;
 	private rename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
 	private rotation: Date;
 	private size: number;
 	private stat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
 	private stream: Writable;
 	private timer: NodeJS.Timeout;
-	private writing: boolean;
+	private: boolean;
 
-	constructor(generator: Generator, options: Options) {
+	constructor(generator: Generator, options: Opts) {
 		const { encoding, path } = options;
 
 		super({ decodeStrings: true, defaultEncoding: encoding });
@@ -91,12 +91,24 @@ export class RFS extends Writable {
 		this.on("close", () => (this.finished ? null : this.emit("finish")));
 		this.on("finish", () => (this.finished = true));
 
-		process.nextTick(() => this.init(error => (this.error = error)));
+		process.nextTick(() =>
+			this.init(error => {
+				this.error = error;
+				if(this.opened) this.opened();
+			})
+		);
 	}
 
 	_destroy(error: Error, callback: Callback): void {
-		if(this.ready && ! this.writing) return callback(error);
-		this.destroyer = (): void => callback(error);
+		const destroyer = (): void => {
+			this.clear();
+			this.close(() => {});
+		};
+
+		if(this.stream) destroyer();
+		else this.destroyer = destroyer;
+
+		callback(error);
 	}
 
 	_final(callback: Callback): void {
@@ -105,10 +117,7 @@ export class RFS extends Writable {
 	}
 
 	_write(chunk: Buffer, encoding: string, callback: Callback): void {
-		const begin: () => void = (): void => this.rewrite({ chunk, encoding, next: null }, callback);
-
-		if(this.ready) return begin();
-		this.opened = begin;
+		this.rewrite({ chunk, encoding, next: null }, callback);
 	}
 
 	_writev(chunks: Chunk[], callback: Callback): void {
@@ -116,69 +125,55 @@ export class RFS extends Writable {
 	}
 
 	private rewrite(chunk: Chunk, callback: Callback): void {
-		const destroy = (error: Error): void => {
-			this.writing = false;
-			if(! this.destroyed) this.destroy();
+		const rewrite = (): void => {
+			const destroy = (error: Error): void => {
+				if(! this.destroyed) this.destroy();
 
-			return callback(error);
+				return callback(error);
+			};
+
+			if(this.error) return destroy(this.error);
+
+			const done: Callback = (error?: Error): void => {
+				if(error) return destroy(error);
+				if(chunk.next) return this.rewrite(chunk.next, callback);
+				callback();
+			};
+
+			this.size += chunk.chunk.length;
+			this.stream.write(chunk.chunk, chunk.encoding, (error: Error): void => {
+				if(error) return done(error);
+				if(this.options.size && this.size >= this.options.size) return this.rotate(done);
+				done();
+			});
 		};
 
-		if(this.error) return destroy(this.error);
-
-		const done: Callback = (error?: Error): void => {
-			if(error) return destroy(error);
-			if(chunk.next) return this.rewrite(chunk.next, callback);
-			this.writing = false;
-			if(this.destroyed) process.nextTick(this.destroyer);
-			callback();
-		};
-
-		this.writing = true;
-		this.size += chunk.chunk.length;
-		this.stream.write(chunk.chunk, chunk.encoding, (error: Error): void => {
-			if(error) return done(error);
-			if(this.options.size && this.size >= this.options.size) return this.rotate(done);
-			done();
-		});
+		if(this.stream) return rewrite();
+		this.opened = rewrite;
 	}
 
 	private init(callback: Callback): void {
-		const done = (error: Error): void => {
-			this.ready = true;
-
-			if(this.opened) {
-				const opened: () => void = this.opened;
-
-				this.opened = null;
-				process.nextTick(opened);
-			}
-
-			if(this.destroyer) process.nextTick(this.destroyer);
-
-			callback(error);
-		};
-
 		this.stat(this.filename, (error, stats) => {
 			const { initialRotation, interval, size } = this.options;
-			if(error) return error.code === "ENOENT" ? this.open(this.filename, false, 0, done) : done(error);
+			if(error) return error.code === "ENOENT" ? this.open(this.filename, false, 0, callback) : callback(error);
 
-			if(! stats.isFile()) return done(new Error(`Can't write on: ${this.filename} (it is not a file)`));
+			if(! stats.isFile()) return callback(new Error(`Can't write on: ${this.filename} (it is not a file)`));
 
 			if(initialRotation) {
 				this.intervalBounds(this.now());
 				const prev = this.prev;
 				this.intervalBounds(new Date(stats.mtime.getTime()));
 
-				if(prev !== this.prev) return this.rotate(done);
+				if(prev !== this.prev) return this.rotate(callback);
 			}
 
 			this.size = stats.size;
 
-			if(! size || stats.size < size) return this.open(this.filename, false, stats.size, done);
+			if(! size || stats.size < size) return this.open(this.filename, false, stats.size, callback);
 
 			if(interval) this.intervalBounds(this.now());
 
-			this.rotate(done);
+			this.rotate(callback);
 		});
 	}
 
@@ -201,35 +196,47 @@ export class RFS extends Writable {
 		if("mode" in this.options) options.mode = this.options.mode;
 
 		let called: boolean;
+		const stream = this.createWriteStream(filename, options);
+
 		const end: Callback = (error?: Error): void => {
 			if(called) {
 				if(error) this.error = error;
 				return;
 			}
+
 			called = true;
+			this.stream = stream;
+
+			if(this.opened) {
+				process.nextTick(this.opened);
+				this.opened = null;
+			}
+
+			if(this.destroyer) process.nextTick(this.destroyer);
+
 			callback(error);
 		};
 
-		this.stream = this.createWriteStream(filename, options);
-
-		this.stream.once("open", () => {
+		stream.once("open", () => {
 			this.size = size;
 			end();
-			this.emit("open", filename);
 			this.interval();
+			this.emit("open", filename);
 		});
 
-		this.stream.once("error", (error: NodeJS.ErrnoException) =>
-			error.code !== "ENOENT" || retry ? end(error) : this.makePath(filename, (error: Error): void => (error ? callback(error) : this.open(filename, true, size, end)))
+		stream.once("error", (error: NodeJS.ErrnoException) =>
+			error.code !== "ENOENT" || retry ? end(error) : this.makePath(filename, (error: Error): void => (error ? end(error) : this.open(filename, true, size, callback)))
 		);
 	}
 
 	private close(callback: Callback): void {
-		if(! this.stream) return callback();
+		const { stream } = this;
 
-		this.stream.on("finish", callback);
-		this.stream.end();
+		if(! stream) return callback();
+
 		this.stream = null;
+		stream.once("finish", callback);
+		stream.end();
 	}
 
 	private now(): Date {
@@ -240,19 +247,19 @@ export class RFS extends Writable {
 		this.size = 0;
 		this.rotation = this.now();
 
-		this.emit("rotation");
 		this.clear();
 		this.close(() => this.move(false, callback));
 		//this._close(this.options.rotate ? this.classical.bind(this, this.options.rotate) : this.options.immutable ? this.immutate.bind(this) : this.move.bind(this));
+		this.emit("rotation");
 	}
 
 	private exhausted(attempts: any): Error {
-		let err = new RFSError("Too many destination file attempts");
-		err.code = "RFS-TOO-MANY";
+		let error = new RotatingFileStreamError("Too many destination file attempts");
+		error.code = "RFS-TOO-MANY";
 
-		if(attempts) err.attempts = attempts;
+		if(attempts) error.attempts = attempts;
 
-		return err;
+		return error;
 	}
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
@@ -390,8 +397,8 @@ export class RFS extends Writable {
 	}
 }
 
-function buildNumberCheck(field: string): (type: string, options: RFSOptions, value: string) => void {
-	return (type: string, options: RFSOptions, value: string): void => {
+function buildNumberCheck(field: string): (type: string, options: Options, value: string) => void {
+	return (type: string, options: Options, value: string): void => {
 		const converted: number = parseInt(value, 10);
 
 		if(type !== "number" || (converted as unknown) !== value || converted <= 0) throw new Error(`'${field}' option must be a positive integer number`);
@@ -399,7 +406,7 @@ function buildNumberCheck(field: string): (type: string, options: RFSOptions, va
 }
 
 function buildStringCheck(field: string, check: (value: string) => any) {
-	return (type: string, options: RFSOptions, value: string): void => {
+	return (type: string, options: Options, value: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.${field}' type: ${type}`);
 
 		options[field] = check(value);
@@ -472,7 +479,7 @@ function checkSize(value: string): any {
 }
 
 const checks: any = {
-	compress: (type: string, options: Options, value: boolean | string | ((source: string, dest: string) => string)): any => {
+	compress: (type: string, options: Opts, value: boolean | string | Compressor): any => {
 		if(! value) throw new Error("A value for 'options.compress' must be specified");
 		if(type === "boolean") return (options.compress = (source: string, dest: string): string => `cat ${source} | gzip -c9 > ${dest}`);
 		if(type === "function") return;
@@ -481,7 +488,7 @@ const checks: any = {
 		if(((value as unknown) as string) !== "gzip") throw new Error(`Don't know how to handle compression method: ${value}`);
 	},
 
-	encoding: (type: string, options: Options, value: string): any => new TextDecoder(value),
+	encoding: (type: string, options: Opts, value: string): any => new TextDecoder(value),
 
 	history: (type: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.history' type: ${type}`);
@@ -499,7 +506,7 @@ const checks: any = {
 
 	mode: (): void => {},
 
-	path: (type: string, options: Options, value: string): void => {
+	path: (type: string, options: Opts, value: string): void => {
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.path' type: ${type}`);
 		if(value[value.length - 1] !== sep) options.path = value + sep;
 	},
@@ -511,8 +518,8 @@ const checks: any = {
 	size: buildStringCheck("size", checkSize)
 };
 
-function checkOptions(options: RFSOptions): Options {
-	const ret: Options = {};
+function checkOpts(options: Options): Opts {
+	const ret: Opts = {};
 
 	for(const opt in options) {
 		const value = options[opt];
@@ -562,11 +569,11 @@ function createGenerator(filename: string): Generator {
 	};
 }
 
-export function createStream(filename: string | Generator, options?: RFSOptions): RFS {
+export function createStream(filename: string | Generator, options?: Options): RotatingFileStream {
 	if(typeof options === "undefined") options = {};
 	else if(typeof options !== "object") throw new Error(`The "options" argument must be of type object. Received type ${typeof options}`);
 
-	const opts = checkOptions(options);
+	const opts = checkOpts(options);
 
 	let generator: Generator;
 
@@ -574,5 +581,5 @@ export function createStream(filename: string | Generator, options?: RFSOptions)
 	else if(typeof filename === "function") generator = filename;
 	else throw new Error(`The "filename" argument must be one of type string or function. Received type ${typeof filename}`);
 
-	return new RFS(generator, opts);
+	return new RotatingFileStream(generator, opts);
 }

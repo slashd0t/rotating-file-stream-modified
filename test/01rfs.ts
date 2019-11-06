@@ -2,7 +2,7 @@
 
 process.env.TZ = "Europe/Rome";
 
-import { RFS, createStream } from "..";
+import { RotatingFileStream, createStream } from "..";
 import { strictEqual as eq, throws as ex } from "assert";
 import { Writable } from "stream";
 
@@ -15,7 +15,7 @@ describe("rfs", () => {
 			rfs.end(done);
 		});
 
-		it("RFS", () => eq(rfs instanceof RFS, true));
+		it("RFS", () => eq(rfs instanceof RotatingFileStream, true));
 		it("Writable", () => eq(rfs instanceof Writable, true));
 		it("std filename generator first time", () => eq(rfs.generator(null), "test.log"));
 		it("std filename generator later times", () => eq(rfs.generator(new Date("1976-01-23 14:45"), 4), "19760123-1445-04-test.log"));
