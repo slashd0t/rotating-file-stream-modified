@@ -71,6 +71,8 @@ $ npm install --save rotating-file-stream
 - [ChangeLog](#changelog)
 - [Donating](#donating)
 
+# Migrating from v1.x.x to v2.x.x
+
 # API
 
 ```javascript
