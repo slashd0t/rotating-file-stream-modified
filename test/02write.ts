@@ -40,12 +40,29 @@ describe("write(s)", () => {
 	});
 
 	describe("destroy before open", function() {
+		let stream: any;
+		let open: boolean;
+
+		const event = (done?: any): void => {
+			open = true;
+			if(done) done();
+		};
+
 		const events = test({}, rfs => {
+			stream = rfs;
+			rfs.on("open", () => console.log("sisi"));
+			rfs.on("open", () => event());
 			rfs.destroy();
 			rfs.write("test\n");
 		});
 
-		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"] }));
+		before(done => {
+			if(open) return done();
+			stream.on("open", () => event(done));
+			stream.on("open", () => console.log("nono"));
+		});
+
+		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"], open: ["test.log"] }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
 	});
 
