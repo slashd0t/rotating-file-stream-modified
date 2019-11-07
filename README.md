@@ -37,6 +37,7 @@ $ npm install --save rotating-file-stream
 
 ### Table of contents
 
+- [Migrating from v1.x.x to v2.x.x](#upgrading-from-v1xx-to-v2xx)
 - [API](#api)
   - [rfs.createStream(filename[, options])](#rfscreatestreamfilename-options)
     - [filename](#filename)
@@ -71,7 +72,20 @@ $ npm install --save rotating-file-stream
 - [ChangeLog](#changelog)
 - [Donating](#donating)
 
-# Migrating from v1.x.x to v2.x.x
+# Upgrading from v1.x.x to v2.x.x
+
+There are two main changes in package interface.
+
+In **v1** the _default export_ of the packege was directly the **RotatingFileStream** _constructor_ and the caller
+should use it; while in **v2** there is no _default export_ and the caller should use the
+[createStream](#rfscreatestreamfilename-options) exported function.
+This is quite easy to discover: if this change is not appliednothing than a runtime error can happen.
+
+The other important change is the removal of option **rotationTime** and the introduction of **intervalBoundary**.
+In **v1** the `time` argument passed to the _filename generator_ function, by default, is the time when _rotaion job_
+started, while if `interval` option is used, it is the lower boundary of the time interval within _rotaion job_
+started. Later I was asked to introduce the possibility to restore the default value for this argument so introduced
+`rotationTime` option with this purpose. At the end the result was somethinga bit confusing.
 
 # API
 

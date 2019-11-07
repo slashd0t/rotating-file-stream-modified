@@ -8,47 +8,47 @@ import { test } from "./helper";
 describe("options", () => {
 	describe("size KiloBytes", () => {
 		let size: number;
-		const events = test({ options: { size: "10K" } }, rfs => rfs.end(() => (size = rfs.options.size)));
+		const events = test({ options: { size: "10K" } }, rfs => rfs.end("test\n", () => (size = rfs.options.size)));
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("10K", () => eq(size, 10240));
 	});
 
 	describe("size MegaBytes", () => {
 		let size: number;
-		const events = test({ options: { size: "10M" } }, rfs => rfs.end(() => (size = rfs.options.size)));
+		const events = test({ options: { size: "10M" } }, rfs => rfs.end("test\n", () => (size = rfs.options.size)));
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("10M", () => eq(size, 10485760));
 	});
 
 	describe("size GigaBytes", () => {
 		let size: number;
-		const events = test({ options: { size: "10G" } }, rfs => rfs.end(() => (size = rfs.options.size)));
+		const events = test({ options: { size: "10G" } }, rfs => rfs.end("test\n", () => (size = rfs.options.size)));
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("10G", () => eq(size, 10737418240));
 	});
 
 	describe("interval minutes", () => {
 		let interval: number;
-		const events = test({ options: { interval: "3m" } }, rfs => rfs.end(() => (interval = rfs.options.interval)));
+		const events = test({ options: { interval: "3m" } }, rfs => rfs.end("test\n", () => (interval = rfs.options.interval)));
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("3'", () => deq(interval, { num: 3, unit: "m" }));
 	});
 
 	describe("interval hours", () => {
 		let interval: number, next: number, prev: number;
 		const events = test({ options: { interval: "3h" } }, rfs =>
-			rfs.end(() => {
+			rfs.end("test\n", () => {
 				interval = rfs.options.interval;
 				rfs.intervalBounds(new Date(2015, 2, 29, 1, 29, 23, 123));
 				({ next, prev } = rfs);
 			})
 		);
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("3h", () => deq(interval, { num: 3, unit: "h" }));
 		it("hours daylight saving", () => eq(next - prev, 7200000));
 	});
@@ -56,14 +56,14 @@ describe("options", () => {
 	describe("interval days", () => {
 		let interval: number, next: number, prev: number;
 		const events = test({ options: { interval: "3d" } }, rfs =>
-			rfs.end(() => {
+			rfs.end("test\n", () => {
 				interval = rfs.options.interval;
 				rfs.intervalBounds(new Date(2015, 2, 29, 1, 29, 23, 123));
 				({ next, prev } = rfs);
 			})
 		);
 
-		it("events", () => deq(events, { finish: 1 }));
+		it("events", () => deq(events, { finish: 1, open: ["test.log"], write: 1 }));
 		it("3h", () => deq(interval, { num: 3, unit: "d" }));
 		it("hours daylight saving", () => eq(next - prev, 255600000));
 	});
