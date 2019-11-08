@@ -56,12 +56,12 @@ $ npm install --save rotating-file-stream
     - [immutable](#immutable)
     - [initialRotation](#initialrotation)
     - [interval](#interval)
+    - [intervalBoundary](#intervalboundary)
     - [maxFiles](#maxfiles)
     - [maxSize](#maxsize)
     - [mode](#mode)
     - [path](#path)
     - [rotate](#rotate)
-    - [rotationTime](#rotationtime)
     - [size](#size)
 - [Rotation logic](#rotation-logic)
 - [Under the hood](#under-the-hood)
@@ -77,15 +77,27 @@ $ npm install --save rotating-file-stream
 There are two main changes in package interface.
 
 In **v1** the _default export_ of the packege was directly the **RotatingFileStream** _constructor_ and the caller
-should use it; while in **v2** there is no _default export_ and the caller should use the
-[createStream](#rfscreatestreamfilename-options) exported function.
-This is quite easy to discover: if this change is not appliednothing than a runtime error can happen.
+have to use it; while in **v2** there is no _default export_ and the caller should use the
+[createStream](#rfscreatestreamfilename-options) exported function and should not directly use
+[RotatingFileStream](#class-rotatingfilestream) class.
+This is quite easy to discover: if this change is not applied, nothing than a runtime error can happen.
 
 The other important change is the removal of option **rotationTime** and the introduction of **intervalBoundary**.
 In **v1** the `time` argument passed to the _filename generator_ function, by default, is the time when _rotaion job_
-started, while if `interval` option is used, it is the lower boundary of the time interval within _rotaion job_
-started. Later I was asked to introduce the possibility to restore the default value for this argument so introduced
-`rotationTime` option with this purpose. At the end the result was somethinga bit confusing.
+started, while if [`options.interval`](#interval) option is used, it is the lower boundary of the time interval within
+_rotaion job_ started. Later I was asked to add the possibility to restore the default value for this argument so I
+introduced `options.rotationTime` option with this purpose. At the end the result was something a bit confusing,
+something I never liked.
+In **v2** the `time` argument passed to the _filename generator_ function is always the time when _rotaion job_
+started, unless [`options.intervalBoundary`](#intervalboundary) option is used. In a few words, to maintain back compatibility
+upgrading from **v1** to **v2**, just follow this rules:
+
+- using [`options.rotation`](#rotation): nothing to do
+- not using [`options.rotation`](#rotation):
+  - not using [`options.interval`](#interval): nothing to do
+  - using [`options.interval`](#interval):
+    - using `options.rotationTime`: to remove it
+    - not using `options.rotationTime`: then use [`options.intervalBoundary`](#intervalboundary).
 
 # API
 
@@ -112,16 +124,8 @@ following _options_ rules.
 The most complex problem about file name is: "how to call the rotated file name?"
 
 The answer to this question may vary in many forms depending on application requirements and/or specifications.
-If there are no requirements, a _String_ can be used and _default rotated file name generator_ will be used;
-otherwise a _Function_ which returns the _rotated file name_ can be used.
-
-**Note:**
-The _not-rotated file name_ **must** be only the _filename_, to specify a _path_ the appropriate option **must** be used.
-
-```javascript
-rfs("path/to/file.log"); // wrong
-rfs("file.log", { path: "path/to" }); // OK
-```
+If there are no requirements, a `string` can be used and _default rotated file name generator_ will be used;
+otherwise a `Function` which returns the _rotated file name_ can be used.
 
 **Note:**
 if part of returned destination path does not exists, the rotation job will try to create it.
@@ -131,9 +135,8 @@ if part of returned destination path does not exists, the rotation job will try 
 - `time` [&lt;Date>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date)
 
   - By default: the time when rotation job started;
-  - if [options.interval](#interval) is enabled: the start time of rotation period;
-  - if both [options.interval](#interval) and [options.rotationTime](#rotationtime) are enabled: the time when rotation
-    job started.
+  - if both [`options.interval`](#interval) and [`intervalBoundary`](#intervalboundary) options are enabled: the start
+    time of rotation period.
 
   If `null`, the _not-rotated file name_ must be returned.
 
@@ -152,7 +155,7 @@ const generator = (time, index) => {
   var hour = pad(time.getHours());
   var minute = pad(time.getMinutes());
 
-  return `${month}${day}-${hour}${minute}-${index}-file.log`;
+  return `${month}/${month}${day}-${hour}${minute}-${index}-file.log`;
 };
 
 const rfs = require("rotating-file-stream");
@@ -163,16 +166,16 @@ const stream = rfs(generator, {
 ```
 
 **Note:**
-if both [options.interval](#interval) and [options.size](#size) are used, returned _rotated file name_ **must** be
-function of both arguments `time` and `index`. Alternatively, [options.rotationTime](#rotationtime) can be used.
+if all of [`options.interval`](#interval), [`options.size`](#size) and [`options.intervalBoundary`](#intervalBoundary)
+are used, returned _rotated file name_ **must** be function of both arguments `time` and `index`.
 
 #### filename(index)
 
 - `index` [&lt;number>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type) The
   progressive index of rotation. If `null`, the _not-rotated file name_ must be returned.
 
-If classical **logrotate** behaviour is enabled (by [options.rotate](#rotate)), _rotated file name_ is only a function
-of `index`.
+If classical **logrotate** behaviour is enabled (by [`options.rotate`](#rotate)), _rotated file name_ is only a
+function of `index`.
 
 ## Class: RotatingFileStream
 
@@ -182,7 +185,7 @@ used. Exported only to be used with `instanceof` operator and similar.
 ### Event: 'open'
 
 - `filename` [&lt;string>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type) Is
-  constant unless [options.immutable](#immutable) is `true`.
+  constant unless [`options.immutable`](#immutable) is `true`.
 
 The `open` event is emitted once the _not-rotated file_ is opened.
 
@@ -191,11 +194,11 @@ The `open` event is emitted once the _not-rotated file_ is opened.
 - `filename` [&lt;string>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type) The
   name of the removed file.
 - `number` [&lt;boolean>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type)
-  - `true` if the file was removed due to [options.maxFiles](#maxFiles)
-  - `false` if the file was removed due to [options.maxSize](#maxSize)
+  - `true` if the file was removed due to [`options.maxFiles`](#maxFiles)
+  - `false` if the file was removed due to [`options.maxSize`](#maxSize)
 
-The `removed` event is emitted once a _rotated file_ is removed due to [options.maxFiles](#maxFiles) or
-[options.maxSize](#maxSize).
+The `removed` event is emitted once a _rotated file_ is removed due to [`options.maxFiles`](#maxFiles) or
+[`options.maxSize`](#maxSize).
 
 ### Event: 'rotation'
 
@@ -237,6 +240,9 @@ The `warning` event is emitted once a non blocking error happens.
 - [`interval`](#interval):
   [&lt;string>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type)
   Specifies the time interval to rotate the file. **Default:** `null`.
+- [`intervalBoundary`](#intervalBoundary):
+  [&lt;boolean>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type)
+  Makes rotated file name with lower boundary of rotation period. **Default:** `null`.
 - [`maxFiles`](#maxFiles):
   [&lt;number>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type)
   Specifies the maximum number of rotated files to keep. **Default:** `null`.
@@ -253,9 +259,6 @@ The `warning` event is emitted once a non blocking error happens.
 - [`rotate`](#rotate):
   [&lt;number>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type)
   Enables the classical UNIX **logrotate** behaviour. **Default:** `null`.
-- [`rotationTime`](#rotationTime):
-  [&lt;boolean>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type)
-  Makes rotated file name with time of rotation. **Default:** `null`.
 - [`size`](#size):
   [&lt;string>](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type)
   Specifies the file size to rotate the file. **Default:** `null`.
@@ -337,12 +340,12 @@ by **Node.js**) or with internal code (to use the CPU used by **Node.js**). This
 
 Following fixed strings are allowed to compress the files with internal libraries:
 
-- bzip2 (**not implemented yet**)
-- gzip
+- `"bzip2"` (**not implemented yet**)
+- `"gzip"`
 
 To enable external compression, a _function_ can be used or simply the _boolean_ `true` value to use default
 external compression.
-The function should accept _source_ and _dest_ file names and must return the shell command to be executed to
+The function should accept `source` and `dest` file names and must return the shell command to be executed to
 compress the file.
 The two following code snippets have exactly the same effect:
 
@@ -358,14 +361,12 @@ var stream = rfs("file.log", {
 var rfs = require("rotating-file-stream");
 var stream = rfs("file.log", {
   size: "10M",
-  compress: function(source, dest) {
-    return "cat " + source + " | gzip -c9 > " + dest;
-  }
+  compress: (source, dest) => "cat " + source + " | gzip -c9 > " + dest
 });
 ```
 
 **Note:**
-this option is ignored if **immutable** is set to `true`.
+this option is ignored if [`optioens.immutable`](#immutable) is set to `true`.
 
 **Note:**
 the shell command to compress the rotated file should not remove the source file, it will be removed by the package
@@ -379,7 +380,7 @@ is performed against the _not-rotated file_ timestamp and, if it falls in a prev
 rotation job is done as well.
 
 **Note:**
-this option is ignored if **rotationTime** is set to `true`.
+this option has effec is set to `true`.
 
 ### rotate
 
