@@ -6,7 +6,7 @@ import { test } from "./helper";
 
 describe("interval", () => {
 	describe("initial rotation with interval", () => {
-		const events = test({ filename: "test.log", files: { "test.log": "test\ntest\n" }, options: { size: "10B", interval: "1M" } }, rfs => {
+		const events = test({ filename: "test.log", files: { "test.log": "test\ntest\n" }, options: { size: "10B", interval: "1M", intervalBoundary: true } }, rfs => {
 			rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
 			rfs.end("test\n");
 		});
@@ -16,8 +16,8 @@ describe("interval", () => {
 		it("rotated file content", () => eq(readFileSync("20150301-0000-01-test.log", "utf8"), "test\ntest\n"));
 	});
 
-	describe("rotationTime option", () => {
-		const events = test({ filename: "test.log", files: { "test.log": "test\n" }, options: { size: "10B", interval: "1d", rotationTime: true, initialRotation: true } }, rfs => {
+	describe("intervalBoundary option", () => {
+		const events = test({ filename: "test.log", files: { "test.log": "test\n" }, options: { size: "10B", interval: "1d", initialRotation: true } }, rfs => {
 			rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
 			rfs.end("test\n");
 		});
@@ -29,7 +29,11 @@ describe("interval", () => {
 
 	describe("initialRotation option", () => {
 		const events = test(
-			{ filename: "test.log", files: { "test.log": { content: "test\n", date: new Date(2015, 0, 23, 1, 29, 23, 123) } }, options: { size: "10B", interval: "1d", initialRotation: true } },
+			{
+				filename: "test.log",
+				files:    { "test.log": { content: "test\n", date: new Date(2015, 0, 23, 1, 29, 23, 123) } },
+				options:  { size: "10B", interval: "1d", intervalBoundary: true, initialRotation: true }
+			},
 			rfs => {
 				rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
 				rfs.end("test\n");
@@ -43,7 +47,11 @@ describe("interval", () => {
 
 	describe("initialRotation option but ok", () => {
 		const events = test(
-			{ filename: "test.log", files: { "test.log": { content: "test\n", date: new Date(2015, 2, 29, 1, 0, 0, 0) } }, options: { size: "10B", interval: "1d", initialRotation: true } },
+			{
+				filename: "test.log",
+				files:    { "test.log": { content: "test\n", date: new Date(2015, 2, 29, 1, 0, 0, 0) } },
+				options:  { size: "10B", interval: "1d", intervalBoundary: true, initialRotation: true }
+			},
 			rfs => {
 				rfs.now = (): Date => new Date(2015, 2, 29, 1, 29, 23, 123);
 				rfs.end("test\n");

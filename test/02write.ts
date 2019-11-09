@@ -50,7 +50,6 @@ describe("write(s)", () => {
 
 		const events = test({}, rfs => {
 			stream = rfs;
-			rfs.on("open", () => console.log("sisi"));
 			rfs.on("open", () => event());
 			rfs.destroy();
 			rfs.write("test\n");
@@ -59,7 +58,6 @@ describe("write(s)", () => {
 		before(done => {
 			if(open) return done();
 			stream.on("open", () => event(done));
-			stream.on("open", () => console.log("nono"));
 		});
 
 		it("events", () => deq(events, { close: 1, finish: 1, error: ["ERR_STREAM_DESTROYED"], open: ["test.log"] }));

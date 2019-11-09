@@ -366,7 +366,7 @@ var stream = rfs("file.log", {
 ```
 
 **Note:**
-this option is ignored if [`optioens.immutable`](#immutable) is set to `true`.
+this option is ignored if [`options.immutable`](#immutable) is used.
 
 **Note:**
 the shell command to compress the rotated file should not remove the source file, it will be removed by the package
@@ -380,7 +380,11 @@ is performed against the _not-rotated file_ timestamp and, if it falls in a prev
 rotation job is done as well.
 
 **Note:**
-this option has effec is set to `true`.
+this option has effect only if both [`options.interval`](#interval) and [`options.intervalBoundary`](#intervalboundary)
+are used.
+
+**Note:**
+this option is ignored if [`options.rotate`](#rotate) is used.
 
 ### rotate
 
@@ -388,38 +392,33 @@ If specified, classical UNIX **logrotate** behaviour is enabled and the value of
 _logrotate.conf_ file.
 
 **Note:**
-following options are ignored if **rotate** option is specified.
+if this optoin is used following ones take no effect: [`options.history`](#history), [`options.immutable`](#immutable),
+[`options.initialRotation`](#initialrotation), [`options.intervalBoundary`](#intervalboundary),
+[`options.maxFiles`](#maxfiles), [`options.maxSize`](#maxsize).
 
 ### immutable
 
 If set to `true`, names of generated files never changes. New files are immediately generated with their rotated
 name. In other words the _rotated file name generator_ is never called with a `null` _time_ argument unless to
-determinate the _history file_ name; this can happen if **maxFiles** or **maxSize** are used without **history**
-option. **rotation** _event_ now has a _filename_ argument with the newly created file name.
+determinate the _history file_ name; this can happen if [`options.history`](#history) is not used while
+[`options.maxFiles`](#maxfiles) or [`options.maxSize`](#maxsize) are used.
+The `filename` argument passed to [`'open'`](#event-open) _event_ evaluates now as the newly created file name.
 
 Useful to send logs to logstash through filebeat.
 
 **Note:**
-if this option is set to `true`, **compress** is ignored.
+if this option is used, [`options.compress`](#compress) is ignored.
 
 **Note:**
-this option is ignored if **interval** is not set.
-
-### rotationTime
-
-As specified above, if rotation by interval is enabled, the argument _time_ passed to _rotated file name generator_ is
-the start time of rotation period. Setting this option to `true`, argument _time_ passed is time when rotation job
-started.
-
-**Note:**
-if this option is set to `true`, **initialRotation** is ignored.
+this option is ignored if [`options.interval`](#interval) is not used.
 
 ### history
 
 Due to the complexity that _rotated file names_ can have because of the _filename generator function_, if number or
 size of rotated files should not exceed a given limit, the package needs a file where to store this information. This
-option specifies the name _history file_. This option takes effect only if at least one of **maxFiles** or **maxSize**
-is used. If `null`, the _not rotated filename_ with the '.txt' suffix is used.
+option specifies the name _history file_. This option takes effect only if at least one of
+[`options.maxFiles`](#maxfiles) or [`options.maxSize`](#maxsize) is used. If `null`, the _not rotated filename_ with
+the `'.txt'` suffix is used.
 
 ### maxFiles
 
@@ -427,8 +426,8 @@ If specified, it's value is the maximum number of _rotated files_ to be kept.
 
 ### maxSize
 
-If specified, it's value must respect same syntax of [size](#size) option and is the maximum size of _rotated files_
-to be kept.
+If specified, it's value must respect same syntax of [option.size](#size) and is the maximum size of _rotated files_ to
+be kept.
 
 # Rotation logic
 
@@ -458,16 +457,17 @@ an initial rotation attempt is done.
 At each rotation attempt a check is done to verify that destination rotated file does not exists yet;
 if this is not the case a new destination _rotated file name_ is generated and the same check is
 performed before going on. This is repeated until a not existing destination file name is found or the
-package is exhausted. For this reason the _rotated file name generator_ function may be called several
+package is exhausted. For this reason the _rotated file name generator_ function could be called several
 times for each rotation job.
 
-If requested by **maxFiles** or **maxSize** options, at the end of a rotation job, a check is performed to ensure that
-given limits are respected. This means that **while rotation job is running both the limits could be not respected**,
-the same can happen (if **maxFiles** or **maxSize** are changed) till the end of first _rotation job_.
-The first check performed is the one against **maxFiles**, in case some files are removed, then the check against
-**maxSize** is performed, finally other files can be removed. When **maxFiles** or **maxSize** are enabled for first
-time, an _history file_ can be created with one _rotated filename_ (as returned by _filename generator function_) at
-each line.
+If requested through [`options.maxFiles`](#maxfiles) or [`options.maxSize`](#maxsize), at the end of a rotation job, a
+check is performed to ensure that given limits are respected. This means that
+**while rotation job is running both the limits could be not respected**. The same can happen till the end of first
+rotation job* if [`options.maxFiles`](#maxfiles) or [`options.maxSize`](#maxsize) are changed between two runs.
+The first check performed is the one against [`options.maxFiles`](#maxfiles), in case some files are removed, then the
+check against [`options.maxSize`](#maxsize) is performed, finally other files can be removed. When
+[`options.maxFiles`](#maxfiles) or [`options.maxSize`](#maxsize) are enabled for first time, an \_history file* can be
+created with one _rotated filename_ (as returned by _filename generator function_) at each line.
 
 Once an **error** _event_ is emitted, nothing more can be done: the stream is closed as well.
 

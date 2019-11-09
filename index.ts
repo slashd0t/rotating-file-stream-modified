@@ -20,12 +20,12 @@ export interface Options {
 	immutable?: boolean;
 	initialRotation?: boolean;
 	interval?: string;
+	intervalBoundary?: boolean;
 	maxFiles?: number;
 	maxSize?: string;
 	mode?: number;
 	path?: string;
 	rotate?: number;
-	rotationTime?: boolean;
 	size?: string;
 }
 
@@ -36,12 +36,12 @@ interface Opts {
 	immutable?: boolean;
 	initialRotation?: boolean;
 	interval?: { num: number; unit: string };
+	intervalBoundary?: boolean;
 	maxFiles?: number;
 	maxSize?: string;
 	mode?: number;
 	path?: string;
 	rotate?: number;
-	rotationTime?: boolean;
 	size?: number;
 }
 
@@ -263,7 +263,7 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
-		const { interval, path, rotate, rotationTime } = this.options;
+		const { interval, path, rotate, intervalBoundary } = this.options;
 		let count = 1;
 		let filename = `${this.filename}.${count}.rfs.tmp`;
 
@@ -273,7 +273,7 @@ export class RotatingFileStream extends Writable {
 
 		if(! tmp) {
 			try {
-				filename = path + (rotate ? this.generator(count) : this.generator(interval && ! rotationTime ? new Date(this.prev) : this.rotation, count));
+				filename = path + (rotate ? this.generator(count) : this.generator(interval && intervalBoundary ? new Date(this.prev) : this.rotation, count));
 			} catch(e) {
 				return callback(e);
 			}
@@ -500,6 +500,8 @@ const checks: any = {
 
 	interval: buildStringCheck("interval", checkInterval),
 
+	intervalBoundary: (): void => {},
+
 	maxFiles: buildNumberCheck("maxFiles"),
 
 	maxSize: buildStringCheck("maxSize", checkSize),
@@ -512,8 +514,6 @@ const checks: any = {
 	},
 
 	rotate: buildNumberCheck("rotate"),
-
-	rotationTime: (): void => {},
 
 	size: buildStringCheck("size", checkSize)
 };
@@ -536,7 +536,7 @@ function checkOpts(options: Options): Opts {
 	if(! ret.interval) {
 		delete ret.immutable;
 		delete ret.initialRotation;
-		delete ret.rotationTime;
+		delete ret.intervalBoundary;
 	}
 
 	if(ret.rotate) {
@@ -544,12 +544,12 @@ function checkOpts(options: Options): Opts {
 		delete ret.immutable;
 		delete ret.maxFiles;
 		delete ret.maxSize;
-		delete ret.rotationTime;
+		delete ret.intervalBoundary;
 	}
 
 	if(ret.immutable) delete ret.compress;
 
-	if(ret.rotationTime) delete ret.initialRotation;
+	if(! ret.intervalBoundary) delete ret.initialRotation;
 
 	return ret;
 }
