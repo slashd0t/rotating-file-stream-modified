@@ -1,13 +1,29 @@
 "use strict";
 
-var assert = require("assert");
-var cp = require("child_process");
-var exec = require("./helper").exec;
-var fs = require("fs");
-var rfs = require("./helper").rfs;
+import { deepStrictEqual as deq, strictEqual as eq } from "assert";
+import { readFileSync } from "fs";
+import { test } from "./helper";
 
-describe("compression", function() {
-	describe("external", function() {
+describe("compression", () => {
+	xdescribe("external", () => {
+		const events = test(
+			{
+				filename: (time: Date, index: number) => (time ? `test.log/${index}` : "test.log/log"),
+				options:  { size: "10B", compress: true }
+			},
+			rfs => {
+				rfs.write("test\n");
+				rfs.end("test\n");
+			}
+		);
+
+		it("events", () => deq(events, { finish: 1, open: ["test.log/log", "test.log/log"], rotated: ["test.log/1"], rotation: 1, write: 2 }));
+		it("file content", () => eq(readFileSync("test.log/log", "utf8"), ""));
+		it("rotated file content", () => eq(readFileSync("20150301-0000-01-test.log", "utf8"), "test\ntest\n"));
+	});
+
+	/*
+	describe("external", () => {
 		before(function(done) {
 			var self = this;
 			exec(done, "rm -rf *log", function() {
@@ -103,7 +119,20 @@ describe("compression", function() {
 			});
 		});
 	});
+	*/
 
+	describe.only("external", () => {
+		const events = test({ options: { size: "10B", compress: "gzip" } }, rfs => {
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 2 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
+		it("rotated file content", () => eq(readFileSync("20150301-0000-01-test.log", "utf8"), "test\ntest\n"));
+	});
+
+	/*
 	describe("internal (gzip)", function() {
 		before(function(done) {
 			var self = this;
@@ -555,4 +584,5 @@ describe("compression", function() {
 			assert.equal(this.rfs.ev.multi, 0);
 		});
 	});
+	*/
 });
