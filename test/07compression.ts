@@ -1,11 +1,12 @@
 "use strict";
 
 import { deepStrictEqual as deq, strictEqual as eq } from "assert";
+import { gunzipSync } from "zlib";
 import { readFileSync } from "fs";
 import { test } from "./helper";
 
 describe("compression", () => {
-	xdescribe("external", () => {
+	describe("external", () => {
 		const events = test(
 			{
 				filename: (time: Date, index: number) => (time ? `test.log/${index}` : "test.log/log"),
@@ -19,7 +20,7 @@ describe("compression", () => {
 
 		it("events", () => deq(events, { finish: 1, open: ["test.log/log", "test.log/log"], rotated: ["test.log/1"], rotation: 1, write: 2 }));
 		it("file content", () => eq(readFileSync("test.log/log", "utf8"), ""));
-		it("rotated file content", () => eq(readFileSync("20150301-0000-01-test.log", "utf8"), "test\ntest\n"));
+		it("rotated file content", () => eq(gunzipSync(readFileSync("test.log/1")).toString(), "test\ntest\n"));
 	});
 
 	/*
@@ -121,7 +122,7 @@ describe("compression", () => {
 	});
 	*/
 
-	describe.only("external", () => {
+	describe("internal (gzip)", () => {
 		const events = test({ options: { size: "10B", compress: "gzip" } }, rfs => {
 			rfs.write("test\n");
 			rfs.end("test\n");
@@ -129,7 +130,7 @@ describe("compression", () => {
 
 		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 2 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
-		it("rotated file content", () => eq(readFileSync("20150301-0000-01-test.log", "utf8"), "test\ntest\n"));
+		it("rotated file content", () => eq(gunzipSync(readFileSync("1-test.log")).toString(), "test\ntest\n"));
 	});
 
 	/*
