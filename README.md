@@ -333,6 +333,24 @@ Accepts a positive integer followed by one of these possible letters:
   interval: '1M', // rotates at every midnight between two distinct months
 ```
 
+### intervalBoundary
+
+If set to `true`, the argument `time` of _filename generator_ is no longer the time when _rotation job_ started, but
+the _lower boundary_ of rotation interval.
+
+**Note:**
+this option has effec only if [`options.interval`](#interval) is used.
+
+### initialRotation
+
+When program stops in a rotation period then restarts in a new rotation period, logs of different rotation period will
+go in the next rotated file; in a few words: a rotation job is lost. If this option is set to `true` an initial check
+is performed against the _not-rotated file_ timestamp and, if it falls in a previous rotation period, an initial
+rotation job is done as well.
+
+**Note:**
+this option has effec only if [`options.intervalBoundary`](#intervalboundary) is used.
+
 ### compress
 
 Due the nature of **Node.js** compression may be done with an external command (to use other CPUs than the one used
