@@ -56,10 +56,10 @@ interface Chunk {
 }
 
 export class RotatingFileStream extends Writable {
-	private close: (fd: number, callback: Callback) => void;
+	private fsClose: (fd: number, callback: Callback) => void;
 	private createGzip: () => Gzip;
-	private createReadStream: (path: string, options: { flags?: string; mode?: number }) => Readable;
-	private createWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
+	private fsCreateReadStream: (path: string, options: { flags?: string; mode?: number }) => Readable;
+	private fsCreateWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
 	private destroyer: () => void;
 	private error: Error;
 	private exec: (command: string, callback?: (error: Error) => void) => ChildProcess;
@@ -67,19 +67,20 @@ export class RotatingFileStream extends Writable {
 	private finished: boolean;
 	private generator: Generator;
 	private maxTimeout: number;
-	private mkdir: (path: string, callback: Callback) => void;
+	private fsMkdir: (path: string, callback: Callback) => void;
 	private next: number;
-	private open: (path: string, flags: string, mode: number, callback: (err: NodeJS.ErrnoException, fd: number) => void) => void;
+	private fsOpen: (path: string, flags: string, mode: number, callback: (err: NodeJS.ErrnoException, fd: number) => void) => void;
 	private opened: () => void;
 	private options: Opts;
 	private prev: number;
-	private rename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
+	private fsRename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
+	private rotatedName: string;
 	private rotation: Date;
 	private size: number;
-	private stat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
+	private fsStat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
 	private stream: Writable;
 	private timer: NodeJS.Timeout;
-	private unlink: (path: string, callback: Callback) => void;
+	private fsUnlink: (path: string, callback: Callback) => void;
 	private fsWrite: (fd: number, data: string, encoding: string, callback: Callback) => void;
 
 	constructor(generator: Generator, options: Opts) {
@@ -87,20 +88,20 @@ export class RotatingFileStream extends Writable {
 
 		super({ decodeStrings: true, defaultEncoding: encoding });
 
-		this.close = close;
+		this.fsClose = close;
 		this.createGzip = createGzip;
-		this.createReadStream = createReadStream;
-		this.createWriteStream = createWriteStream;
+		this.fsCreateReadStream = createReadStream;
+		this.fsCreateWriteStream = createWriteStream;
 		this.exec = exec;
 		this.filename = path + generator(null);
 		this.generator = generator;
 		this.maxTimeout = 2147483640;
-		this.mkdir = mkdir;
-		this.open = open;
+		this.fsMkdir = mkdir;
+		this.fsOpen = open;
 		this.options = options;
-		this.rename = rename;
-		this.stat = stat;
-		this.unlink = unlink;
+		this.fsRename = rename;
+		this.fsStat = stat;
+		this.fsUnlink = unlink;
 		this.fsWrite = (write as unknown) as (fd: number, data: string, encoding: string, callback: Callback) => void;
 
 		this.on("close", () => (this.finished ? null : this.emit("finish")));
@@ -168,9 +169,9 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private init(callback: Callback): void {
-		this.stat(this.filename, (error, stats) => {
+		this.fsStat(this.filename, (error, stats) => {
 			const { initialRotation, interval, size } = this.options;
-			if(error) return error.code === "ENOENT" ? this.reopen(this.filename, false, 0, callback) : callback(error);
+			if(error) return error.code === "ENOENT" ? this.reopen(false, 0, callback) : callback(error);
 
 			if(! stats.isFile()) return callback(new Error(`Can't write on: ${this.filename} (it is not a file)`));
 
@@ -184,7 +185,7 @@ export class RotatingFileStream extends Writable {
 
 			this.size = stats.size;
 
-			if(! size || stats.size < size) return this.reopen(this.filename, false, stats.size, callback);
+			if(! size || stats.size < size) return this.reopen(false, stats.size, callback);
 
 			if(interval) this.intervalBounds(this.now());
 
@@ -195,7 +196,7 @@ export class RotatingFileStream extends Writable {
 	private makePath(name: string, callback: Callback): void {
 		const dir = parse(name).dir;
 
-		this.mkdir(dir, (error: NodeJS.ErrnoException): void => {
+		this.fsMkdir(dir, (error: NodeJS.ErrnoException): void => {
 			if(error) {
 				if(error.code === "ENOENT") return this.makePath(dir, (error: Error): void => (error ? callback(error) : this.makePath(name, callback)));
 				if(error.code !== "EEXIST") return callback(error);
@@ -205,13 +206,13 @@ export class RotatingFileStream extends Writable {
 		});
 	}
 
-	private reopen(filename: string, retry: boolean, size: number, callback: Callback): void {
+	private reopen(retry: boolean, size: number, callback: Callback): void {
 		const options: any = { flags: "a" };
 
 		if("mode" in this.options) options.mode = this.options.mode;
 
 		let called: boolean;
-		const stream = this.createWriteStream(filename, options);
+		const stream = this.fsCreateWriteStream(this.filename, options);
 
 		const end: Callback = (error?: Error): void => {
 			if(called) {
@@ -236,11 +237,11 @@ export class RotatingFileStream extends Writable {
 			this.size = size;
 			end();
 			this.interval();
-			this.emit("open", filename);
+			this.emit("open", this.filename);
 		});
 
 		stream.once("error", (error: NodeJS.ErrnoException) =>
-			error.code !== "ENOENT" || retry ? end(error) : this.makePath(filename, (error: Error): void => (error ? end(error) : this.reopen(filename, true, size, callback)))
+			error.code !== "ENOENT" || retry ? end(error) : this.makePath(this.filename, (error: Error): void => (error ? end(error) : this.reopen(true, size, callback)))
 		);
 	}
 
@@ -259,11 +260,13 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private rotate(callback: Callback): void {
+		const { rotate } = this.options;
+
 		this.size = 0;
 		this.rotation = this.now();
 
 		this.clear();
-		this.reclose(() => this.move(callback));
+		this.reclose(() => (rotate ? this.classical(rotate, callback) : this.move(callback)));
 		//this._close(this.options.rotate ? this.classical.bind(this, this.options.rotate) : this.options.immutable ? this.immutate.bind(this) : this.move.bind(this));
 		this.emit("rotation");
 	}
@@ -300,7 +303,7 @@ export class RotatingFileStream extends Writable {
 			return this.findName(attempts, tmp, callback);
 		}
 
-		this.stat(filename, err => {
+		this.fsStat(filename, err => {
 			if(! err || err.code !== "ENOENT") {
 				attempts[filename] = 1;
 
@@ -318,7 +321,7 @@ export class RotatingFileStream extends Writable {
 		const open = (error?: Error): void => {
 			if(error) return callback(error);
 
-			this.reopen(this.filename, false, 0, callback);
+			this.reopen(false, 0, callback);
 			this.emit("rotated", filename);
 		};
 
@@ -331,13 +334,13 @@ export class RotatingFileStream extends Writable {
 				if(error) return callback(error);
 
 				if(compress) return this.compress(filename, open);
-				this.rename(this.filename, filename, open);
+				this.fsRename(this.filename, filename, open);
 			});
 		});
 	}
 
 	private touch(filename: string, retry: boolean, callback: Callback): void {
-		this.open(filename, "a", parseInt("666", 8), (error: NodeJS.ErrnoException, fd: number) => {
+		this.fsOpen(filename, "a", parseInt("666", 8), (error: NodeJS.ErrnoException, fd: number) => {
 			if(error) {
 				if(error.code !== "ENOENT" && ! retry) return callback(error);
 
@@ -348,14 +351,66 @@ export class RotatingFileStream extends Writable {
 				});
 			}
 
-			return this.close(fd, (error: Error): void => {
+			return this.fsClose(fd, (error: Error): void => {
 				if(error) return callback(error);
 
-				this.unlink(filename, (error: Error): void => {
+				this.fsUnlink(filename, (error: Error): void => {
 					if(error) this.emit("warning", error);
 					callback();
 				});
 			});
+		});
+	}
+
+	private classical(count: number, callback: Callback): void {
+		const { compress, rotate } = this.options;
+		let prevName: string;
+		let thisName: string;
+
+		if(rotate === count) delete this.rotatedName;
+
+		const open = (error: Error): void => {
+			if(error) return callback(error);
+
+			this.reopen(false, 0, callback);
+			this.emit("rotated", this.rotatedName);
+		};
+
+		try {
+			prevName = count === 1 ? this.filename : this.generator(count - 1);
+			thisName = this.generator(count);
+		} catch(e) {
+			return callback(e);
+		}
+
+		const move = (done: Callback): void => {
+			if(count === 1 && compress) return this.compress(thisName, open);
+
+			this.fsRename(prevName, thisName, (error: NodeJS.ErrnoException): void => {
+				if(! error) return done();
+
+				if(error.code !== "ENOENT") return callback(error);
+
+				this.makePath(thisName, (error: Error): void => {
+					if(error) return callback(error);
+
+					this.fsRename(prevName, thisName, (error: Error): void => (error ? callback(error) : done()));
+				});
+			});
+		};
+
+		const next = count === 1 ? callback : (error: Error): void => (error ? callback(error) : this.classical(count - 1, callback));
+
+		this.fsStat(prevName, (error: NodeJS.ErrnoException): void => {
+			if(error) {
+				if(error.code !== "ENOENT") return callback(error);
+
+				return next();
+			}
+
+			if(! this.rotatedName) this.rotatedName = thisName;
+
+			move(next);
 		});
 	}
 
@@ -422,12 +477,12 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private compress(filename: string, callback: Callback): void {
-		const { compress, rotate } = this.options;
+		const { compress } = this.options;
 
 		const done = (error?: Error): void => {
 			if(error) return callback(error);
 
-			this.unlink(this.filename, callback);
+			this.fsUnlink(this.filename, callback);
 		};
 
 		if(typeof compress === "function") this.external(filename, done);
@@ -453,11 +508,11 @@ export class RotatingFileStream extends Writable {
 		this.findName(att, true, (error: Error, found: string): void => {
 			if(error) return callback(error);
 
-			this.open(found, "w", parseInt("777", 8), (error: Error, fd: number): void => {
+			this.fsOpen(found, "w", parseInt("777", 8), (error: Error, fd: number): void => {
 				if(error) return callback(error);
 
 				const unlink = (error: Error): void => {
-					this.unlink(found, (error2: Error): void => {
+					this.fsUnlink(found, (error2: Error): void => {
 						if(error2) this.emit("warning", error2);
 
 						callback(error);
@@ -465,7 +520,7 @@ export class RotatingFileStream extends Writable {
 				};
 
 				this.fsWrite(fd, cont, "utf8", (error: Error): void => {
-					this.close(fd, (error2: Error): void => {
+					this.fsClose(fd, (error2: Error): void => {
 						if(error) {
 							if(error2) this.emit("warning", error2);
 
@@ -486,8 +541,8 @@ export class RotatingFileStream extends Writable {
 	private gzip(filename: string, callback: Callback): void {
 		const { mode } = this.options;
 		const options = mode ? { mode } : {};
-		const inp = this.createReadStream(this.filename, {});
-		const out = this.createWriteStream(filename, options);
+		const inp = this.fsCreateReadStream(this.filename, {});
+		const out = this.fsCreateWriteStream(filename, options);
 		const zip = this.createGzip();
 
 		[inp, out, zip].map(stream => stream.once("error", callback));
@@ -654,6 +709,10 @@ function checkOpts(options: Options): Opts {
 	return ret;
 }
 
+function createClassical(filename: string): Generator {
+	return (index: number): string => (index ? `${filename}.${index}` : filename);
+}
+
 function createGenerator(filename: string): Generator {
 	const pad = (num: number): string => (num > 9 ? "" : "0") + num;
 
@@ -677,7 +736,7 @@ export function createStream(filename: string | Generator, options?: Options): R
 
 	let generator: Generator;
 
-	if(typeof filename === "string") generator = createGenerator(filename);
+	if(typeof filename === "string") generator = options.rotate ? createClassical(filename) : createGenerator(filename);
 	else if(typeof filename === "function") generator = filename;
 	else throw new Error(`The "filename" argument must be one of type string or function. Received type ${typeof filename}`);
 

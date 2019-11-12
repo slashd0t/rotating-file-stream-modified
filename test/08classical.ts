@@ -1,13 +1,22 @@
 "use strict";
 
-var assert = require("assert");
-var cp = require("child_process");
-var exec = require("./helper").exec;
-var fs = require("fs");
-var rfs = require("./helper").rfs;
-var utils = require("../utils");
+import { deepStrictEqual as deq, strictEqual as eq } from "assert";
+import { gunzipSync } from "zlib";
+import { readFileSync } from "fs";
+import { test } from "./helper";
 
-describe("classical", function() {
+describe.only("classical", function() {
+	describe("initial rotation with interval", () => {
+		const events = test({ files: { "test.log": "test\ntest\n" }, filename: "test.log", options: { interval: "1d", rotate: 2, size: "10B" } }, rfs => {
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["test.log/1"], rotation: 1, write: 2 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), ""));
+		it("rotated file content", () => eq(gunzipSync(readFileSync("test.log/1")).toString(), "test\ntest\n"));
+	});
+	/*
 	describe("initial rotation with interval", function() {
 		before(function(done) {
 			var self = this;
@@ -429,4 +438,5 @@ describe("classical", function() {
 			assert.equal(this.rfs.ev.multi, 0);
 		});
 	});
+	*/
 });

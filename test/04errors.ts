@@ -176,7 +176,7 @@ describe("errors", () => {
 
 	describe("error while rename", () => {
 		const events = test({ options: { size: "5B" } }, rfs => {
-			rfs.rename = (a: string, b: string, callback: any): void => process.nextTick(() => callback(new Error(a + b)));
+			rfs.fsRename = (a: string, b: string, callback: any): void => process.nextTick(() => callback(new Error(a + b)));
 			rfs.once("open", () => rfs.write("test\n"));
 		});
 
@@ -187,7 +187,7 @@ describe("errors", () => {
 		const filename = `log${sep}t${sep}test.log`;
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
-			rfs.mkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)));
+			rfs.fsMkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)));
 			rfs.write("test\n");
 			rfs.write("test\n");
 			rfs.end("test\n");
@@ -200,7 +200,7 @@ describe("errors", () => {
 		const filename = `log${sep}t${sep}test.log`;
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
-			rfs.on("rotation", () => (rfs.mkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)))));
+			rfs.on("rotation", () => (rfs.fsMkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test " + path)))));
 			rfs.write("test\n");
 			rfs.write("test\n");
 			rfs.end("test\n");
@@ -213,7 +213,7 @@ describe("errors", () => {
 		const filename = `log${sep}t${sep}test.log`;
 		const rotated = `log${sep}t${sep}t${sep}test.log`;
 		const events = test({ filename: (time: Date): string => (time ? rotated : filename), options: { size: "10B" } }, rfs => {
-			rfs.createWriteStream = (): any => ({
+			rfs.fsCreateWriteStream = (): any => ({
 				end:  (): void => {},
 				once: (event: string, callback: (error: any) => void): any => (event === "error" ? setTimeout(() => callback({ code: "TEST" }), 50) : null)
 			});

@@ -150,7 +150,7 @@
 		"lines-around-comment": 0,
 		"max-depth": 0,
 		"max-len": [2, { "code": 200 }],
-		"max-lines": ["error", 750],
+		"max-lines": ["error", 1000],
 		"max-nested-callbacks": 0,
 		"max-params": 0,
 		"max-statements": ["error", 150],
