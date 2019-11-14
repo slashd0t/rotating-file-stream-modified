@@ -369,7 +369,7 @@ export class RotatingFileStream extends Writable {
 
 		if(rotate === count) delete this.rotatedName;
 
-		const open = (error: Error): void => {
+		const open = (error?: Error): void => {
 			if(error) return callback(error);
 
 			this.reopen(false, 0, callback);
@@ -399,7 +399,7 @@ export class RotatingFileStream extends Writable {
 			});
 		};
 
-		const next = count === 1 ? callback : (error: Error): void => (error ? callback(error) : this.classical(count - 1, callback));
+		const next = count === 1 ? open : (error: Error): void => (error ? callback(error) : this.classical(count - 1, callback));
 
 		this.fsStat(prevName, (error: NodeJS.ErrnoException): void => {
 			if(error) {

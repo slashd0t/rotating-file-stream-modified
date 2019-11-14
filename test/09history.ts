@@ -1,11 +1,44 @@
 "use strict";
 
-var assert = require("assert");
-var exec = require("./helper").exec;
-var fs = require("fs");
-var rfs = require("./helper").rfs;
+import { deepStrictEqual as deq, strictEqual as eq } from "assert";
+import { gunzipSync } from "zlib";
+import { readFileSync } from "fs";
+import { sep } from "path";
+import { test } from "./helper";
 
-describe("history", function() {
+describe("history", () => {
+	describe("maxFiles", () => {
+		const events = test({ options: { maxFiles: 3, size: "10B" } }, rfs => {
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () =>
+			deq(events, {
+				finish:   1,
+				open:     ["test.log", "test.log", "test.log", "test.log", "test.log", "test.log"],
+				rotated:  ["1-test.log", "2-test.log", "3-test.log", "4-test.log", "5-test.log"],
+				rotation: 5,
+				write:    1,
+				writev:   1
+			}));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
+		it("first rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
+		it("second rotated file content", () => eq(readFileSync("2-test.log", "utf8"), "test\ntest\n"));
+		it("third rotated file content", () => eq(readFileSync("3-test.log", "utf8"), "test\ntest\n"));
+		it("fourth rotated file content", () => eq(readFileSync("4-test.log", "utf8"), "test\ntest\n"));
+	});
+
+	/*
 	describe("maxFiles", function() {
 		before(function(done) {
 			var self = this;
@@ -374,4 +407,5 @@ describe("history", function() {
 			);
 		});
 	});
+	*/
 });

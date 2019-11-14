@@ -99,6 +99,7 @@ export function test(opt: any, test: (rfs: any) => void): any {
 			rfs.on("finish", end);
 			rfs.on("finish", () => inc("finish"));
 			rfs.on("open", filename => push("open", filename));
+			rfs.on("removed", (filename, number) => push("removed" + (number ? "n" : "f"), filename));
 			rfs.on("rotated", filename => push("rotated", filename));
 			rfs.on("rotation", () => inc("rotation"));
 			rfs.on("warning", err => push("warning", err.message));
