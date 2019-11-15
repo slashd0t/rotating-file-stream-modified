@@ -3,7 +3,7 @@
 import { ChildProcess, exec } from "child_process";
 import { Gzip, createGzip } from "zlib";
 import { Readable, Writable } from "stream";
-import { Stats, close, createReadStream, createWriteStream, mkdir, open, rename, stat, unlink, write } from "fs";
+import { Stats, close, createReadStream, createWriteStream, mkdir, open, readFile, rename, stat, unlink, write, writeFile } from "fs";
 import { parse, sep } from "path";
 import { TextDecoder } from "util";
 
@@ -40,7 +40,7 @@ interface Opts {
 	interval?: { num: number; unit: string };
 	intervalBoundary?: boolean;
 	maxFiles?: number;
-	maxSize?: string;
+	maxSize?: number;
 	mode?: number;
 	path?: string;
 	rotate?: number;
@@ -55,54 +55,64 @@ interface Chunk {
 	next: Chunk;
 }
 
+interface History {
+	name: string;
+	size: number;
+	time: number;
+}
+
 export class RotatingFileStream extends Writable {
-	private fsClose: (fd: number, callback: Callback) => void;
 	private createGzip: () => Gzip;
-	private fsCreateReadStream: (path: string, options: { flags?: string; mode?: number }) => Readable;
-	private fsCreateWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
 	private destroyer: () => void;
 	private error: Error;
 	private exec: (command: string, callback?: (error: Error) => void) => ChildProcess;
 	private filename: string;
 	private finished: boolean;
+	private fsClose: (fd: number, callback: Callback) => void;
+	private fsCreateReadStream: (path: string, options: { flags?: string; mode?: number }) => Readable;
+	private fsCreateWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
+	private fsMkdir: (path: string, callback: Callback) => void;
+	private fsOpen: (path: string, flags: string, mode: number, callback: (err: NodeJS.ErrnoException, fd: number) => void) => void;
+	private fsReadFile: (path: string, encoding: string, callback: (err: NodeJS.ErrnoException, data: string) => void) => void;
+	private fsRename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
+	private fsStat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
+	private fsUnlink: (path: string, callback: Callback) => void;
+	private fsWrite: (fd: number, data: string, encoding: string, callback: Callback) => void;
+	private fsWriteFile: (path: string, data: string, encoding: string, callback: Callback) => void;
 	private generator: Generator;
 	private maxTimeout: number;
-	private fsMkdir: (path: string, callback: Callback) => void;
 	private next: number;
-	private fsOpen: (path: string, flags: string, mode: number, callback: (err: NodeJS.ErrnoException, fd: number) => void) => void;
 	private opened: () => void;
 	private options: Opts;
 	private prev: number;
-	private fsRename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
 	private rotatedName: string;
 	private rotation: Date;
 	private size: number;
-	private fsStat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
 	private stream: Writable;
 	private timer: NodeJS.Timeout;
-	private fsUnlink: (path: string, callback: Callback) => void;
-	private fsWrite: (fd: number, data: string, encoding: string, callback: Callback) => void;
 
 	constructor(generator: Generator, options: Opts) {
 		const { encoding, path } = options;
 
 		super({ decodeStrings: true, defaultEncoding: encoding });
 
-		this.fsClose = close;
 		this.createGzip = createGzip;
-		this.fsCreateReadStream = createReadStream;
-		this.fsCreateWriteStream = createWriteStream;
 		this.exec = exec;
 		this.filename = path + generator(null);
-		this.generator = generator;
-		this.maxTimeout = 2147483640;
+		this.fsClose = close;
+		this.fsCreateReadStream = createReadStream;
+		this.fsCreateWriteStream = createWriteStream;
 		this.fsMkdir = mkdir;
 		this.fsOpen = open;
-		this.options = options;
+		this.fsReadFile = readFile;
 		this.fsRename = rename;
 		this.fsStat = stat;
 		this.fsUnlink = unlink;
 		this.fsWrite = (write as unknown) as (fd: number, data: string, encoding: string, callback: Callback) => void;
+		this.fsWriteFile = writeFile;
+		this.generator = generator;
+		this.maxTimeout = 2147483640;
+		this.options = options;
 
 		this.on("close", () => (this.finished ? null : this.emit("finish")));
 		this.on("finish", () => (this.finished = true));
@@ -321,8 +331,7 @@ export class RotatingFileStream extends Writable {
 		const open = (error?: Error): void => {
 			if(error) return callback(error);
 
-			this.reopen(false, 0, callback);
-			this.emit("rotated", filename);
+			this.rotated(filename, callback);
 		};
 
 		this.findName({}, false, (error: Error, found: string): void => {
@@ -372,8 +381,7 @@ export class RotatingFileStream extends Writable {
 		const open = (error?: Error): void => {
 			if(error) return callback(error);
 
-			this.reopen(false, 0, callback);
-			this.emit("rotated", this.rotatedName);
+			this.rotated(this.rotatedName, callback);
 		};
 
 		try {
@@ -549,6 +557,100 @@ export class RotatingFileStream extends Writable {
 		out.once("finish", callback);
 
 		inp.pipe(zip).pipe(out);
+	}
+
+	private rotated(filename: string, callback: Callback): void {
+		const { maxFiles, maxSize } = this.options;
+
+		const open = (error?: Error): void => {
+			if(error) return callback(error);
+
+			this.reopen(false, 0, callback);
+			this.emit("rotated", filename);
+		};
+
+		if(maxFiles || maxSize) return this.history(filename, open);
+		open();
+	}
+
+	private history(filename: string, callback: Callback): void {
+		let { history } = this.options;
+
+		if(! history) this.options.history = history = this.generator(null) + ".txt";
+
+		this.fsReadFile(history, "utf8", (error: NodeJS.ErrnoException, data: string): void => {
+			if(error) {
+				if(error.code !== "ENOENT") return callback(error);
+
+				return this.historyGather([filename], 0, [], callback);
+			}
+
+			const files = data.split("\n");
+
+			files.push(filename);
+			this.historyGather(files, 0, [], callback);
+		});
+	}
+
+	private historyGather(files: string[], index: number, res: History[], callback: Callback): void {
+		if(index === files.length) return this.historyCheckFiles(res, callback);
+
+		this.fsStat(files[index], (error: NodeJS.ErrnoException, stats: Stats): void => {
+			if(error) {
+				if(error.code !== "ENOENT") return callback(error);
+			} else if(stats.isFile()) {
+				res.push({
+					name: files[index],
+					size: stats.size,
+					time: stats.ctime.getTime()
+				});
+			} else this.emit("warning", `File '${files[index]}' contained in history is not a regular file`);
+
+			this.historyGather(files, index + 1, res, callback);
+		});
+	}
+
+	private historyRemove(files: History[], size: boolean, callback: Callback): void {
+		const file = files.shift();
+
+		this.fsUnlink(file.name, (error: NodeJS.ErrnoException): void => {
+			if(error) return callback(error);
+
+			this.emit("removed", file.name, ! size);
+			callback();
+		});
+	}
+
+	private historyCheckFiles(files: History[], callback: Callback): void {
+		const { maxFiles } = this.options;
+
+		files.sort((a, b) => a.time - b.time);
+
+		if(! maxFiles || files.length <= maxFiles) return this.historyCheckSize(files, callback);
+
+		this.historyRemove(files, false, (error: Error): void => (error ? callback(error) : this.historyCheckFiles(files, callback)));
+	}
+
+	private historyCheckSize(files: History[], callback: Callback): void {
+		const { maxSize } = this.options;
+		let size = 0;
+
+		if(! maxSize) return this.historyWrite(files, callback);
+
+		files.map(e => (size += e.size));
+
+		if(size <= maxSize) return this.historyWrite(files, callback);
+
+		this.historyRemove(files, true, (error: Error): void => (error ? callback(error) : this.historyCheckSize(files, callback)));
+	}
+
+	private historyWrite(files: History[], callback: Callback): void {
+		this.fsWriteFile(this.options.history, files.map(e => e.name).join("\n"), "utf8", (error: NodeJS.ErrnoException): void => {
+			if(error) return callback(error);
+
+			this.emit("history");
+			callback();
+		});
 	}
 }
 

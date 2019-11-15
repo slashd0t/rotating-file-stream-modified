@@ -98,8 +98,9 @@ export function test(opt: any, test: (rfs: any) => void): any {
 			rfs.on("error", error => push("error", "code" in error ? error["code"] : error.message));
 			rfs.on("finish", end);
 			rfs.on("finish", () => inc("finish"));
+			rfs.on("history", () => inc("history"));
 			rfs.on("open", filename => push("open", filename));
-			rfs.on("removed", (filename, number) => push("removed" + (number ? "n" : "f"), filename));
+			rfs.on("removed", (filename, number) => push("removed" + (number ? "n" : "s"), filename));
 			rfs.on("rotated", filename => push("rotated", filename));
 			rfs.on("rotation", () => inc("rotation"));
 			rfs.on("warning", err => push("warning", err.message));

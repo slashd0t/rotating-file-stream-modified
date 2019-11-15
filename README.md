@@ -44,6 +44,7 @@ $ npm install --save rotating-file-stream
       - [filename(time[, index])](#filenametime-index)
       - [filename(time)](#filename-time)
   - [Class: RotatingFileStream](#class-rotatingfilestream)
+    - [Event: 'history'](#event-history)
     - [Event: 'open'](#event-open)
     - [Event: 'removed'](#event-removed)
     - [Event: 'rotation'](#event-rotation)
@@ -181,6 +182,10 @@ function of `index`.
 
 Extends [stream.Writable](https://nodejs.org/api/stream.html#stream_class_stream_writable). It should not be directly
 used. Exported only to be used with `instanceof` operator and similar.
+
+### Event: 'history'
+
+The `history` event is emitted once the _history check job _ is completed.
 
 ### Event: 'open'
 
@@ -517,12 +522,12 @@ export interface Options {
   immutable?: boolean;
   initialRotation?: boolean;
   interval?: string;
+  intervalBoundary?: boolean;
   maxFiles?: number;
   maxSize?: string;
   mode?: number;
   path?: string;
   rotate?: number;
-  rotationTime?: boolean;
   size?: string;
 }
 export declare class RotatingFileStream extends Writable {}

@@ -1,186 +1,64 @@
 "use strict";
 
 import { deepStrictEqual as deq, strictEqual as eq } from "assert";
-import { gunzipSync } from "zlib";
 import { readFileSync } from "fs";
-import { sep } from "path";
 import { test } from "./helper";
 
 describe("history", () => {
 	describe("maxFiles", () => {
 		const events = test({ options: { maxFiles: 3, size: "10B" } }, rfs => {
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
-			rfs.write("test\n");
+			rfs.write("test\ntest\n");
+			rfs.write("test\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\ntest\ntest\n");
 			rfs.end("test\n");
 		});
 
 		it("events", () =>
 			deq(events, {
 				finish:   1,
+				history:  5,
 				open:     ["test.log", "test.log", "test.log", "test.log", "test.log", "test.log"],
-				rotated:  ["1-test.log", "2-test.log", "3-test.log", "4-test.log", "5-test.log"],
+				removedn: ["1-test.log", "2-test.log"],
+				rotated:  ["1-test.log", "2-test.log", "3-test.log", "4-test.log", "1-test.log"],
 				rotation: 5,
 				write:    1,
 				writev:   1
 			}));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
-		it("first rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
-		it("second rotated file content", () => eq(readFileSync("2-test.log", "utf8"), "test\ntest\n"));
-		it("third rotated file content", () => eq(readFileSync("3-test.log", "utf8"), "test\ntest\n"));
-		it("fourth rotated file content", () => eq(readFileSync("4-test.log", "utf8"), "test\ntest\n"));
+		it("first rotated file content", () => eq(readFileSync("3-test.log", "utf8"), "test\ntest\ntest\ntest\n"));
+		it("second rotated file content", () => eq(readFileSync("4-test.log", "utf8"), "test\ntest\ntest\ntest\ntest\n"));
+		it("third rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\ntest\ntest\ntest\ntest\n"));
+	});
+
+	describe("maxSize", () => {
+		const events = test({ options: { maxSize: "60B", size: "10B" } }, rfs => {
+			rfs.write("test\ntest\n");
+			rfs.write("test\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\ntest\ntest\n");
+			rfs.end("test\n");
+		});
+
+		it("events", () =>
+			deq(events, {
+				finish:   1,
+				history:  5,
+				open:     ["test.log", "test.log", "test.log", "test.log", "test.log", "test.log"],
+				removeds: ["1-test.log", "2-test.log", "3-test.log"],
+				rotated:  ["1-test.log", "2-test.log", "3-test.log", "4-test.log", "1-test.log"],
+				rotation: 5,
+				write:    1,
+				writev:   1
+			}));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
+		it("first rotated file content", () => eq(readFileSync("4-test.log", "utf8"), "test\ntest\ntest\ntest\ntest\n"));
+		it("second rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\ntest\ntest\ntest\ntest\n"));
 	});
 
 	/*
-	describe("maxFiles", function() {
-		before(function(done) {
-			var self = this;
-			var end = doneN(done, 2);
-			exec(done, "rm -rf *log *txt ; echo none > test.log.txt ; echo -n test >> test.log.txt", function() {
-				self.rfs = rfs(end, { size: "10B", maxFiles: 3 });
-				self.rfs.on("removed", function(name, number) {
-					self.removed = name;
-					self.number = number;
-					end();
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.once("history", function() {
-					self.rfs.write("test\n");
-					self.rfs.write("test\n");
-					self.rfs.once("history", function() {
-						self.rfs.write("test\n");
-						self.rfs.write("test\n");
-						self.rfs.once("history", function() {
-							self.rfs.write("test\n");
-							self.rfs.write("test\n");
-							self.rfs.once("history", function() {
-								self.rfs.end("test\n");
-							});
-						});
-					});
-				});
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn, "File 'test' contained in history is not a regular file");
-		});
-
-		it("4 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 4);
-		});
-
-		it("4 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 4);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-
-		it("removed", function() {
-			assert.equal(this.removed, "1-test.log");
-			assert.equal(this.number, true);
-		});
-
-		it("removed first rotated file", function() {
-			assert.equal(fs.existsSync("1-test.log"), false);
-		});
-
-		it("second rotated file content", function() {
-			assert.equal(fs.readFileSync("2-test.log"), "test\ntest\n");
-		});
-
-		it("third rotated file content", function() {
-			assert.equal(fs.readFileSync("3-test.log"), "test\ntest\n");
-		});
-
-		it("forth rotated file content", function() {
-			assert.equal(fs.readFileSync("4-test.log"), "test\ntest\n");
-		});
-	});
-
-	describe("maxSize", function() {
-		before(function(done) {
-			var self = this;
-			var end = doneN(done, 2);
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(end, { size: "10B", maxSize: "35B", history: "history.log" });
-				self.rfs.on("removed", function(name, number) {
-					self.removed = name;
-					self.number = number;
-					end();
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.once("history", function() {
-					self.rfs.write("test\n");
-					self.rfs.write("test\n");
-					self.rfs.once("history", function() {
-						self.rfs.write("test\n");
-						self.rfs.write("test\n");
-						self.rfs.once("history", function() {
-							self.rfs.write("test\n");
-							self.rfs.write("test\n");
-							self.rfs.once("history", function() {
-								self.rfs.end("test\n");
-							});
-						});
-					});
-				});
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("4 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 4);
-		});
-
-		it("4 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 4);
-		});
-
-		it("file content", function() {
-			assert.equal(fs.readFileSync("test.log"), "test\n");
-		});
-
-		it("removed", function() {
-			assert.equal(this.removed, "1-test.log");
-			assert.equal(this.number, false);
-		});
-
-		it("removed first rotated file", function() {
-			assert.equal(fs.existsSync("1-test.log"), false);
-		});
-
-		it("second rotated file content", function() {
-			assert.equal(fs.readFileSync("2-test.log"), "test\ntest\n");
-		});
-
-		it("third rotated file content", function() {
-			assert.equal(fs.readFileSync("3-test.log"), "test\ntest\n");
-		});
-
-		it("forth rotated file content", function() {
-			assert.equal(fs.readFileSync("4-test.log"), "test\ntest\n");
-		});
-	});
-
 	describe("error reading history file", function() {
 		before(function(done) {
 			var self = this;

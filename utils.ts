@@ -2,7 +2,7 @@
 
 import { readFile, unlink, writeFile } from "fs";
 
-const common: string[] = ["*gz", "*log", "*tmp", ".gitignore", ".npmignore", ".nyc_output", "coverage", "node_modules", ""];
+const common: string[] = ["*gz", "*log", "*tmp", "*txt", ".gitignore", ".npmignore", ".nyc_output", "coverage", "node_modules", ""];
 const git: string[] = ["index.d.ts", "index.js"];
 const npm: string[] = [".*", "index.ts", "test", "tsconfig.json", "tslint.json", "utils.ts"];
 

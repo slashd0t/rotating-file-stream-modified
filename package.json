@@ -33,18 +33,21 @@
 		"cchare (https://github.com/cchare)"
 	],
 	"license": "MIT",
+	"funding": {
+		"url": "https://www.blockchain.com/btc/address/12p1p5q7sK75tPyuesZmssiMYr4TKzpSCN"
+	},
 	"readmeFilename": "README.md",
 	"types": "index.d.ts",
 	"devDependencies": {
 		"@types/mocha": "5.2.7",
-		"@types/node": "12.12.5",
-		"@typescript-eslint/eslint-plugin": "2.6.0",
-		"@typescript-eslint/parser": "2.6.0",
+		"@types/node": "12.12.7",
+		"@typescript-eslint/eslint-plugin": "2.7.0",
+		"@typescript-eslint/parser": "2.7.0",
 		"eslint": "6.6.0",
 		"mocha": "6.2.2",
 		"nyc": "14.1.1",
-		"prettier": "1.18.2",
-		"ts-node": "8.4.1",
-		"typescript": "3.6.4"
+		"prettier": "1.19.1",
+		"ts-node": "8.5.2",
+		"typescript": "3.7.2"
 	}
 }
