@@ -80,6 +80,7 @@ export class RotatingFileStream extends Writable {
 	private fsWrite: (fd: number, data: string, encoding: string, callback: Callback) => void;
 	private fsWriteFile: (path: string, data: string, encoding: string, callback: Callback) => void;
 	private generator: Generator;
+	private last: string;
 	private maxTimeout: number;
 	private next: number;
 	private opened: () => void;
@@ -179,8 +180,11 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private init(callback: Callback): void {
+		const { immutable, initialRotation, interval, size } = this.options;
+
+		if(immutable) return this.immutate(true, callback);
+
 		this.fsStat(this.filename, (error, stats) => {
-			const { initialRotation, interval, size } = this.options;
 			if(error) return error.code === "ENOENT" ? this.reopen(false, 0, callback) : callback(error);
 
 			if(! stats.isFile()) return callback(new Error(`Can't write on: ${this.filename} (it is not a file)`));
@@ -270,18 +274,17 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private rotate(callback: Callback): void {
-		const { rotate } = this.options;
+		const { immutable, rotate } = this.options;
 
 		this.size = 0;
 		this.rotation = this.now();
 
 		this.clear();
-		this.reclose(() => (rotate ? this.classical(rotate, callback) : this.move(callback)));
-		//this._close(this.options.rotate ? this.classical.bind(this, this.options.rotate) : this.options.immutable ? this.immutate.bind(this) : this.move.bind(this));
+		this.reclose(() => (rotate ? this.classical(rotate, callback) : immutable ? this.immutate(false, callback) : this.move(callback)));
 		this.emit("rotation");
 	}
 
-	private exhausted(attempts: any): Error {
+	private exhausted(attempts?: any): Error {
 		let error = new RotatingFileStreamError("Too many destination file attempts");
 		error.code = "RFS-TOO-MANY";
 
@@ -650,6 +653,49 @@ export class RotatingFileStream extends Writable {
 
 			this.emit("history");
 			callback();
+		});
+	}
+
+	private immutate(first: boolean, callback: Callback, index?: number, now?: Date): void {
+		if(! index) {
+			index = 1;
+			now = this.now();
+		}
+
+		if(index >= 1001) return callback(this.exhausted());
+
+		try {
+			this.filename = this.generator(now, index);
+		} catch(e) {
+			return callback(e);
+		}
+
+		const open = (size: number, callback: Callback): void => {
+			if(first) {
+				this.last = this.filename;
+				return this.reopen(false, size, callback);
+			}
+
+			this.rotated(this.last, (error: Error): void => {
+				this.last = this.filename;
+				callback(error);
+			});
+		};
+
+		this.fsStat(this.filename, (error: NodeJS.ErrnoException, stats: Stats): void => {
+			const { size } = this.options;
+
+			if(error) {
+				if(error.code === "ENOENT") return open(0, callback);
+
+				return callback(error);
+			}
+
+			if(! stats.isFile()) return callback(new Error(`Can't write on: '${this.filename}' (it is not a file)`));
+
+			if(size && stats.size >= size) return this.immutate(first, callback, index + 1, now);
+
+			open(stats.size, callback);
 		});
 	}
 }

@@ -97,7 +97,7 @@ describe("options", () => {
 	});
 
 	describe("safe options object", () => {
-		let options;
+		let options: any;
 		const events = test({ options: { size: "10M", interval: "1d", rotate: 5 } }, rfs => {
 			rfs.write("test\n");
 			rfs.write("test\n");
@@ -110,65 +110,19 @@ describe("options", () => {
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\ntest\ntest\n"));
 	});
 
-	/*
-	describe("immutable", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log ; echo test > 1-test.log ; echo test > 2-test.log ; echo test >> 2-test.log", function() {
-				self.rfs = rfs(done, { immutable: true, interval: "1d", size: "10B" });
-				self.rfs.ev.op = [];
-				self.rfs.on("open", function(filename) {
-					self.rfs.ev.op.push(filename);
-				});
-				self.rfs.write("tes1\n");
-				self.rfs.write("tes2\n");
-				self.rfs.write("tes3\n");
-				self.rfs.end("test\n");
-			});
+	describe("immutable", () => {
+		const events = test({ options: { immutable: true, interval: "1d", size: "10B" } }, rfs => {
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("2 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 2);
-		});
-
-		it("2 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 2);
-			assert.equal(this.rfs.ev.rotated[0], "1-test.log");
-			assert.equal(this.rfs.ev.rotated[1], "3-test.log");
-		});
-
-		it("3 open", function() {
-			assert.equal(this.rfs.ev.op.length, 3);
-			assert.equal(this.rfs.ev.op[0], "1-test.log");
-			assert.equal(this.rfs.ev.op[1], "3-test.log");
-			assert.equal(this.rfs.ev.op[2], "4-test.log");
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("1 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 1);
-		});
-
-		it("1st file content", function() {
-			assert.equal(fs.readFileSync("1-test.log"), "test\ntes1\n");
-		});
-
-		it("2nd file content", function() {
-			assert.equal(fs.readFileSync("3-test.log"), "tes2\ntes3\n");
-		});
-
-		it("3rd file content", function() {
-			assert.equal(fs.readFileSync("4-test.log"), "test\n");
-		});
+		it("events", () => deq(events, { finish: 1, open: ["1-test.log", "2-test.log"], rotated: ["1-test.log"], rotation: 1, write: 1, writev: 1 }));
+		it("first file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
+		it("second file content", () => eq(readFileSync("2-test.log", "utf8"), "test\n"));
 	});
 
+	/*
 	describe("immutable with time", function() {
 		before(function(done) {
 			var self = this;
