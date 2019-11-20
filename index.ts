@@ -73,8 +73,8 @@ export class RotatingFileStream extends Writable {
 	private fsCreateWriteStream: (path: string, options: { flags?: string; mode?: number }) => Writable;
 	private fsMkdir: (path: string, callback: Callback) => void;
 	private fsOpen: (path: string, flags: string, mode: number, callback: (err: NodeJS.ErrnoException, fd: number) => void) => void;
-	private fsReadFile: (path: string, encoding: string, callback: (err: NodeJS.ErrnoException, data: string) => void) => void;
-	private fsRename: (oldPath: string, newPath: string, callback: (err: NodeJS.ErrnoException) => void) => void;
+	private fsReadFile: (path: string, encoding: string, callback: (error: NodeJS.ErrnoException, data: string) => void) => void;
+	private fsRename: (oldPath: string, newPath: string, callback: (error: NodeJS.ErrnoException) => void) => void;
 	private fsStat: (path: string, callback: (err: NodeJS.ErrnoException, stats: Stats) => void) => void;
 	private fsUnlink: (path: string, callback: Callback) => void;
 	private fsWrite: (fd: number, data: string, encoding: string, callback: Callback) => void;
@@ -116,7 +116,7 @@ export class RotatingFileStream extends Writable {
 		this.options = options;
 
 		this.on("close", () => (this.finished ? null : this.emit("finish")));
-		this.on("finish", () => (this.finished = true));
+		this.on("finish", () => (this.finished = this.clear()));
 
 		process.nextTick(() =>
 			this.init(error => {
@@ -213,7 +213,7 @@ export class RotatingFileStream extends Writable {
 		this.fsMkdir(dir, (error: NodeJS.ErrnoException): void => {
 			if(error) {
 				if(error.code === "ENOENT") return this.makePath(dir, (error: Error): void => (error ? callback(error) : this.makePath(name, callback)));
-				if(error.code !== "EEXIST") return callback(error);
+				return callback(error);
 			}
 
 			callback();
@@ -230,7 +230,7 @@ export class RotatingFileStream extends Writable {
 
 		const end: Callback = (error?: Error): void => {
 			if(called) {
-				if(error) this.error = error;
+				this.error = error;
 				return;
 			}
 
@@ -294,7 +294,7 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private findName(attempts: any, tmp: boolean, callback: (error: Error, filename?: string) => void): void {
-		const { interval, path, rotate, intervalBoundary } = this.options;
+		const { interval, path, intervalBoundary } = this.options;
 		let count = 1;
 		let filename = `${this.filename}.${count}.rfs.tmp`;
 
@@ -304,7 +304,7 @@ export class RotatingFileStream extends Writable {
 
 		if(! tmp) {
 			try {
-				filename = path + (rotate ? this.generator(count) : this.generator(interval && intervalBoundary ? new Date(this.prev) : this.rotation, count));
+				filename = path + this.generator(interval && intervalBoundary ? new Date(this.prev) : this.rotation, count);
 			} catch(e) {
 				return callback(e);
 			}
@@ -354,7 +354,7 @@ export class RotatingFileStream extends Writable {
 	private touch(filename: string, retry: boolean, callback: Callback): void {
 		this.fsOpen(filename, "a", parseInt("666", 8), (error: NodeJS.ErrnoException, fd: number) => {
 			if(error) {
-				if(error.code !== "ENOENT" && ! retry) return callback(error);
+				if(error.code !== "ENOENT" || retry) return callback(error);
 
 				return this.makePath(filename, error => {
 					if(error) return callback(error);
@@ -425,11 +425,13 @@ export class RotatingFileStream extends Writable {
 		});
 	}
 
-	private clear(): void {
+	private clear(): boolean {
 		if(this.timer) {
 			clearTimeout(this.timer);
 			this.timer = null;
 		}
+
+		return true;
 	}
 
 	private intervalBoundsBig(now: Date): void {
@@ -498,10 +500,6 @@ export class RotatingFileStream extends Writable {
 
 		if(typeof compress === "function") this.external(filename, done);
 		else this.gzip(filename, done);
-		/*
-		if(compress === "gzip") self.gzip(tmp, name, done);
-		else throw new Error("Not implemented yet");
-		*/
 	}
 
 	private external(filename: string, callback: Callback): void {
@@ -787,7 +785,6 @@ const checks: any = {
 		if(type === "boolean") return (options.compress = (source: string, dest: string): string => `cat ${source} | gzip -c9 > ${dest}`);
 		if(type === "function") return;
 		if(type !== "string") throw new Error(`Don't know how to handle 'options.compress' type: ${type}`);
-		// if(value != "bzip" && value != "gzip")
 		if(((value as unknown) as string) !== "gzip") throw new Error(`Don't know how to handle compression method: ${value}`);
 	},
 

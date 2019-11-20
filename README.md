@@ -358,13 +358,7 @@ this option has effec only if [`options.intervalBoundary`](#intervalboundary) is
 
 ### compress
 
-Due the nature of **Node.js** compression may be done with an external command (to use other CPUs than the one used
-by **Node.js**) or with internal code (to use the CPU used by **Node.js**). This decision is left to you.
-
-Following fixed strings are allowed to compress the files with internal libraries:
-
-- `"bzip2"` (**not implemented yet**)
-- `"gzip"`
+For historical reasons external compression can be used, but the best choice is to use the value `"gzip"`.
 
 To enable external compression, a _function_ can be used or simply the _boolean_ `true` value to use default
 external compression.

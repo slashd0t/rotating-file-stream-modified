@@ -1,8 +1,8 @@
 "use strict";
 
 import { deepStrictEqual as deq, strictEqual as eq } from "assert";
+import { readFileSync, rename } from "fs";
 import { gunzipSync } from "zlib";
-import { readFileSync } from "fs";
 import { sep } from "path";
 import { test } from "./helper";
 
@@ -70,7 +70,7 @@ describe("classical", function() {
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\ntest\n"));
 	});
 
-	describe("wrong name generator (rotation)", () => {
+	describe("wrong name generator", () => {
 		const events = test(
 			{
 				filename: (index?: number): string => {
@@ -89,131 +89,37 @@ describe("classical", function() {
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\ntest\n"));
 	});
 
-	/*
-	describe("exhausted (rotation)", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { compress: "gzip", rotate: 2, size: "5B" }, "test.log");
-				var pre = self.rfs.findName;
-				self.rfs.findName = function(a, b, c) {
-					if(b) return c(Error("test"));
-					pre.apply(self, arguments);
-				};
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
+	describe("first rename error", () => {
+		const events = test({ filename: (index?: number): string => (index ? "txt/test.log" : "test.log"), options: { rotate: 2, size: "10B" } }, rfs => {
+			rfs.fsRename = (oldPath: string, newPath: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test")));
+			rfs.write("test\ntest\n");
 		});
 
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "test");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("2 single write", function() {
-			assert.equal(this.rfs.ev.single, 2);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
+		it("events", () => deq(events, { close: 1, error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
 	});
-	*/
+
+	describe("mkdir error", () => {
+		const events = test({ filename: (index?: number): string => (index ? "txt/test.log" : "test.log"), options: { rotate: 2, size: "10B" } }, rfs => {
+			rfs.fsMkdir = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test")));
+			rfs.write("test\ntest\n");
+		});
+
+		it("events", () => deq(events, { close: 1, error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
+
+	describe("second rename error", () => {
+		const events = test({ filename: (index?: number): string => (index ? "txt/test.log" : "test.log"), options: { rotate: 2, size: "10B" } }, rfs => {
+			rfs.fsRename = (oldPath: string, newPath: string, callback: (error: Error) => void): void => {
+				rfs.fsRename = (oldPath: string, newPath: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error("test")));
+				rename(oldPath, newPath, callback);
+			};
+			rfs.write("test\ntest\n");
+		});
+
+		it("events", () => deq(events, { close: 1, error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
 
 	/*
-	describe("first rename error", function() {
-		var pre;
-
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { rotate: 2, size: "5B" }, "test.log");
-				pre = fs.rename;
-				fs.rename = function(a, b, c) {
-					if(a === "test.log" && b === "test.log.1") return c(Error("test"));
-					pre.apply(fs, arguments);
-				};
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
-		});
-
-		after(function() {
-			fs.rename = pre;
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "test");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("2 single write", function() {
-			assert.equal(this.rfs.ev.single, 2);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
-	describe("makePath", function() {
-		var pre;
-
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { rotate: 2, size: "5B" }, function(count) {
-					if(count) return "test2.log/test.log";
-					return "test.log";
-				});
-				pre = utils.makePath;
-				utils.makePath = function(a, c) {
-					c(Error("test"));
-				};
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
-		});
-
-		after(function() {
-			utils.makePath = pre;
-		});
-
-		it("Error", function() {
-			assert.equal(this.rfs.err.message, "test");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("2 single write", function() {
-			assert.equal(this.rfs.ev.single, 2);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
 	describe("second rename error", function() {
 		var pre;
 

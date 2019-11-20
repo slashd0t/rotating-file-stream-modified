@@ -63,8 +63,12 @@ describe("interval", () => {
 		it("rotated file content", () => eq(readFileSync("20150329-0000-01-test.log", "utf8"), "test\ntest\n"));
 	});
 
-	describe("_write while rotation", () => {
-		const events = test({ files: { "test.log": "test\ntest\n" }, options: { interval: "1s" } }, rfs => rfs.on("rotation", () => rfs.end("test\n")));
+	describe("write while rotation", () => {
+		const events = test({ files: { "test.log": "test\ntest\n" }, options: { interval: "1s" } }, rfs => {
+			let ms = 990;
+			rfs.now = (): Date => new Date(2015, 0, 23, 0, 0, 0, (ms -= 10));
+			rfs.once("rotation", () => rfs.end("test\n"));
+		});
 
 		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log"], rotated: ["1-test.log"], rotation: 1, write: 1 }));
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
@@ -74,6 +78,8 @@ describe("interval", () => {
 	describe("_write while rotation", () => {
 		const events = test({ files: { "test.log": "test\ntest\n" }, options: { interval: "1s" } }, rfs => {
 			const prev = rfs._write;
+			let ms = 990;
+			rfs.now = (): Date => new Date(2015, 0, 23, 0, 0, 0, (ms -= 10));
 			rfs._write = (chunk: any, encoding: any, callback: any): any => rfs.once("rotation", prev.bind(rfs, chunk, encoding, callback));
 
 			rfs.end("test\n");
