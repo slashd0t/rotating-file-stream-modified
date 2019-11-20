@@ -226,89 +226,24 @@ describe("errors", () => {
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
 
+	describe("error in external compression function", () => {
+		const events = test(
+			{
+				options: {
+					compress: (): string => {
+						throw new Error("test");
+					},
+					rotate: 2,
+					size:   "10B"
+				}
+			},
+			rfs => rfs.write("test\ntest\n")
+		);
+
+		it("events", () => deq(events, { close: 1, error: ["test"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
+
 	/*
-	describe("error unlinking external compression file", function() {
-		before(function(done) {
-			var self = this;
-			var oldU = fs.unlink;
-			exec(done, "rm -rf *log", function() {
-				fs.unlink = function(path, callback) {
-					setTimeout(function() {
-						fs.unlink = oldU;
-						callback({ code: "TEST" });
-					}, 50);
-				};
-				self.rfs = rfs(done, { size: "5B", compress: true });
-				self.rfs.end("test\n");
-			});
-		});
-
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn.code, "TEST");
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
-	describe("error in external compression function", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, {
-					size:     "5B",
-					compress: function() {
-						var e = new Error("test");
-						e.code = "TEST";
-						throw e;
-					}
-				});
-				self.rfs.write("test\n");
-			});
-		});
-
-		it("error", function() {
-			assert.equal(this.rfs.err.code, "TEST");
-		});
-
-		it("no warning", function() {
-			assert.ifError(this.rfs.ev.warn);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("0 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 0);
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("0 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 0);
-		});
-	});
-
 	describe("error in stat (immutable)", function() {
 		before(function(done) {
 			var self = this;

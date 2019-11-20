@@ -122,57 +122,16 @@ describe("options", () => {
 		it("second file content", () => eq(readFileSync("2-test.log", "utf8"), "test\n"));
 	});
 
-	/*
-	describe("immutable with time", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log", function() {
-				self.rfs = rfs(done, { immutable: true, interval: "1d", size: "10B" }, utils.createGenerator("test.log"));
-				self.rfs.now = function() {
-					return new Date(1976, 0, 23, 13, 29, 23, 123).getTime();
-				};
-				self.rfs.ev.op = [];
-				self.rfs.on("open", function(filename) {
-					self.rfs.ev.op.push(filename);
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
+	describe("immutable with file", () => {
+		const events = test({ files: { "1-test.log": "test\n" }, options: { immutable: true, interval: "1d", size: "10B" } }, rfs => {
+			rfs.write("test\n");
+			rfs.write("test\n");
+			rfs.end("test\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("1 rotation", function() {
-			assert.equal(this.rfs.ev.rotation.length, 1);
-		});
-
-		it("1 rotated", function() {
-			assert.equal(this.rfs.ev.rotated.length, 1);
-		});
-
-		it("2 open", function() {
-			assert.equal(this.rfs.ev.op.length, 2);
-			assert.equal(this.rfs.ev.op[1], "19760123-1329-02-test.log");
-		});
-
-		it("1 single write", function() {
-			assert.equal(this.rfs.ev.single, 1);
-		});
-
-		it("1 multi write", function() {
-			assert.equal(this.rfs.ev.multi, 1);
-		});
-
-		it("1st file content", function() {
-			assert.equal(fs.readFileSync(this.rfs.ev.op[0]), "test\ntest\n");
-		});
-
-		it("2nd file content", function() {
-			assert.equal(fs.readFileSync("19760123-1329-02-test.log"), "test\n");
-		});
+		it("events", () => deq(events, { finish: 1, open: ["1-test.log", "2-test.log", "3-test.log"], rotated: ["1-test.log", "2-test.log"], rotation: 2, write: 1, writev: 1 }));
+		it("first file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
+		it("second file content", () => eq(readFileSync("2-test.log", "utf8"), "test\ntest\n"));
+		it("third file content", () => eq(readFileSync("3-test.log", "utf8"), ""));
 	});
-	*/
 });

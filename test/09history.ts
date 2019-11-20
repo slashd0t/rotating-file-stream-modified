@@ -6,7 +6,7 @@ import { test } from "./helper";
 
 describe("history", () => {
 	describe("maxFiles", () => {
-		const events = test({ options: { maxFiles: 3, size: "10B" } }, rfs => {
+		const events = test({ files: { "test.log.txt": "test\nnone" }, options: { maxFiles: 3, size: "10B" } }, rfs => {
 			rfs.write("test\ntest\n");
 			rfs.write("test\ntest\ntest\n");
 			rfs.write("test\ntest\ntest\ntest\n");
@@ -23,6 +23,7 @@ describe("history", () => {
 				removedn: ["1-test.log", "2-test.log"],
 				rotated:  ["1-test.log", "2-test.log", "3-test.log", "4-test.log", "1-test.log"],
 				rotation: 5,
+				warning:  ["File 'test' contained in history is not a regular file"],
 				write:    1,
 				writev:   1
 			}));
@@ -58,130 +59,90 @@ describe("history", () => {
 		it("second rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\ntest\ntest\ntest\ntest\n"));
 	});
 
-	/*
-	describe("error reading history file", function() {
-		before(function(done) {
-			var self = this;
-			exec(done, "rm -rf *log *txt", function() {
-				self.rfs = rfs(setTimeout.bind(null, done, 100), { size: "10B", maxFiles: 1, history: "test" });
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-			});
+	describe("error reading history file", () => {
+		const events = test({ options: { maxSize: "60B", size: "10B" } }, rfs => {
+			rfs.fsReadFile = (path: string, encoding: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error(`test ${path} ${encoding}`)));
+			rfs.write("test\ntest\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn.code, "EISDIR");
-		});
+		it("events", () => deq(events, { close: 1, error: ["test test.log.txt utf8"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
 	});
 
-	describe("error writing history file", function() {
-		before(function(done) {
-			var self = this;
-			var pre = fs.writeFile;
-			var end = doneN(done, 2);
-			fs.writeFile = function(a, b, c, d) {
-				d("TEST");
+	describe("error writing history file", () => {
+		const events = test({ options: { maxSize: "60B", size: "10B" } }, rfs => {
+			rfs.fsWriteFile = (path: string, data: string, encoding: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error(`test ${path} ${data} ${encoding}`)));
+			rfs.write("test\ntest\n");
+		});
+
+		it("events", () => deq(events, { close: 1, error: ["test test.log.txt 1-test.log utf8"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
+	});
+
+	describe("error checking rotated file", () => {
+		const events = test({ options: { maxSize: "60B", size: "10B" } }, rfs => {
+			const prev = rfs.history;
+			rfs.history = (filename: string, callback: (error: Error) => void): void => {
+				rfs.fsStat = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error(`test ${path}`)));
+				prev.bind(rfs, filename, callback)();
 			};
-			exec(done, "rm -rf *log *txt", function() {
-				self.rfs = rfs(end, { size: "10B", maxFiles: 1 });
-				self.rfs.on("removed", function(name) {
-					self.removed = name;
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.end("test\n");
-				self.rfs.once("warning", function() {
-					fs.writeFile = pre;
-					end();
-				});
-			});
+			rfs.write("test\ntest\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn, "TEST");
-		});
+		it("events", () => deq(events, { close: 1, error: ["test 1-test.log"], finish: 1, open: ["test.log"], rotation: 1, write: 1 }));
 	});
 
-	describe("error removing file", function() {
-		before(function(done) {
-			var self = this;
-			var pre = fs.unlink;
-			var end = doneN(done, 2);
-			fs.unlink = function(a, b) {
-				fs.unlink = pre;
-				b("TEST");
+	describe("error removing rotated file (size)", () => {
+		const events = test({ options: { maxSize: "50B", size: "10B" } }, rfs => {
+			const prev = rfs.historyRemove;
+			rfs.historyRemove = (files: any, size: boolean, callback: (error: Error) => void): void => {
+				rfs.fsUnlink = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error(`test ${files.map((e: any) => e.name).join(", ")} ${size}`)));
+				prev.bind(rfs, files, size, callback)();
 			};
-			exec(done, "rm -rf *log *txt", function() {
-				self.rfs = rfs(end, { size: "10B", maxFiles: 1 });
-				self.rfs.on("removed", function(name) {
-					self.removed = name;
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				self.rfs.once("warning", end);
-				self.rfs.once("history", function() {
-					self.rfs.write("test\n");
-					self.rfs.write("test\n");
-					self.rfs.once("history", function() {
-						self.rfs.end("test\n");
-					});
-				});
-			});
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn, "TEST");
-		});
+		it("events", () =>
+			deq(events, {
+				close:    1,
+				error:    ["test 2-test.log, 3-test.log true"],
+				finish:   1,
+				history:  2,
+				open:     ["test.log", "test.log", "test.log"],
+				rotation: 3,
+				rotated:  ["1-test.log", "2-test.log"],
+				write:    1,
+				writev:   1
+			}));
 	});
 
-	describe("error checking file", function() {
-		before(function(done) {
-			var self = this;
-			var preR = fs.readFile;
-			var preS = fs.stat;
-			exec(done, "rm -rf *log *txt", function() {
-				self.rfs = rfs(setTimeout.bind(null, done, 100), { size: "10B", maxFiles: 1 });
-				self.rfs.on("removed", function(name) {
-					self.removed = name;
-				});
-				self.rfs.on("warning", function() {
-					self.rfs.end("test\n");
-				});
-				self.rfs.write("test\n");
-				self.rfs.write("test\n");
-				fs.readFile = function(a, b, c) {
-					fs.stat = function(a, b) {
-						fs.stat = preS;
-						b("TEST");
-					};
-					fs.readFile = preR;
-					fs.readFile(a, b, c);
-				};
-			});
+	describe("error removing rotated file (files)", () => {
+		const events = test({ options: { maxFiles: 2, size: "10B" } }, rfs => {
+			const prev = rfs.historyRemove;
+			rfs.historyRemove = (files: any, size: boolean, callback: (error: Error) => void): void => {
+				rfs.fsUnlink = (path: string, callback: (error: Error) => void): void => process.nextTick(() => callback(new Error(`test ${files.map((e: any) => e.name).join(", ")} ${size}`)));
+				prev.bind(rfs, files, size, callback)();
+			};
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
+			rfs.write("test\ntest\ntest\ntest\n");
 		});
 
-		it("no error", function() {
-			assert.ifError(this.rfs.ev.err);
-		});
-
-		it("warning", function() {
-			assert.equal(this.rfs.ev.warn, "TEST");
-		});
+		it("events", () =>
+			deq(events, {
+				close:    1,
+				error:    ["test 2-test.log, 3-test.log false"],
+				finish:   1,
+				history:  2,
+				open:     ["test.log", "test.log", "test.log"],
+				rotation: 3,
+				rotated:  ["1-test.log", "2-test.log"],
+				write:    1,
+				writev:   1
+			}));
 	});
-	*/
 
 	describe("immutable", () => {
 		let min = 0;

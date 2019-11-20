@@ -394,23 +394,23 @@ export class RotatingFileStream extends Writable {
 			return callback(e);
 		}
 
-		const move = (done: Callback): void => {
+		const next = count === 1 ? open : (): void => this.classical(count - 1, callback);
+
+		const move = (): void => {
 			if(count === 1 && compress) return this.compress(thisName, open);
 
 			this.fsRename(prevName, thisName, (error: NodeJS.ErrnoException): void => {
-				if(! error) return done();
+				if(! error) return next();
 
 				if(error.code !== "ENOENT") return callback(error);
 
 				this.makePath(thisName, (error: Error): void => {
 					if(error) return callback(error);
 
-					this.fsRename(prevName, thisName, (error: Error): void => (error ? callback(error) : done()));
+					this.fsRename(prevName, thisName, (error: Error): void => (error ? callback(error) : next()));
 				});
 			});
 		};
-
-		const next = count === 1 ? open : (error: Error): void => (error ? callback(error) : this.classical(count - 1, callback));
 
 		this.fsStat(prevName, (error: NodeJS.ErrnoException): void => {
 			if(error) {
@@ -421,7 +421,7 @@ export class RotatingFileStream extends Writable {
 
 			if(! this.rotatedName) this.rotatedName = thisName;
 
-			move(next);
+			move();
 		});
 	}
 
@@ -473,8 +473,6 @@ export class RotatingFileStream extends Writable {
 	}
 
 	private interval(): void {
-		if(this.timer) throw new Error("double timer");
-
 		if(! this.options.interval) return;
 
 		this.intervalBounds(this.now());
@@ -605,7 +603,7 @@ export class RotatingFileStream extends Writable {
 					size: stats.size,
 					time: stats.ctime.getTime()
 				});
-			} else this.emit("warning", `File '${files[index]}' contained in history is not a regular file`);
+			} else this.emit("warning", new Error(`File '${files[index]}' contained in history is not a regular file`));
 
 			this.historyGather(files, index + 1, res, callback);
 		});

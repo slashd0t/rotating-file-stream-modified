@@ -89,4 +89,37 @@ describe("interval", () => {
 		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
 		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
 	});
+
+	describe("monthly rotation", () => {
+		const events = test({ files: { "test.log": "test\n" }, options: { interval: "2M", size: "10B" } }, rfs => {
+			let cnt = 0;
+			rfs.maxTimeout = 200;
+			rfs.now = (): Date => {
+				cnt++;
+				if(cnt === 1 || cnt === 2) return new Date(1976, 0, 23, 0, 0, 0, 0);
+				if(cnt === 3) return new Date(1976, 1, 1, 0, 0, 0, 0);
+				if(cnt === 4) return new Date(1976, 1, 29, 23, 59, 59, 950);
+				if(cnt === 5 || cnt === 6) return new Date(1976, 2, 1, 0, 0, 0, 0);
+				if(cnt === 7 || cnt === 8) return new Date(1976, 2, 10, 0, 0, 0, 0);
+				if(cnt === 9) return new Date(1976, 3, 30, 23, 59, 59, 950);
+				return new Date(1976, 4, 1, 0, 0, 0, 0);
+			};
+
+			rfs.write("test\n");
+			rfs.once("rotated", (): void => {
+				rfs.write("test\n");
+				rfs.write("test\n");
+				rfs.once("rotated", (): void => {
+					rfs.write("test\n");
+					rfs.once("rotated", (): void => {
+						rfs.end("test\n");
+					});
+				});
+			});
+		});
+
+		it("events", () => deq(events, { finish: 1, open: ["test.log", "test.log", "test.log", "test.log"], rotated: ["1-test.log", "2-test.log", "3-test.log"], rotation: 3, write: 3, writev: 1 }));
+		it("file content", () => eq(readFileSync("test.log", "utf8"), "test\n"));
+		it("rotated file content", () => eq(readFileSync("1-test.log", "utf8"), "test\ntest\n"));
+	});
 });
