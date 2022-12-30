@@ -36,7 +36,7 @@
 	"types": "index.d.ts",
 	"devDependencies": {
 		"eslint": "6.5.1",
-		"mocha": "6.2.2",
+		"mocha": "10.2.0",
 		"nyc": "14.1.1",
 		"typescript": "3.6.4",
 		"@types/node": "12.11.1"
